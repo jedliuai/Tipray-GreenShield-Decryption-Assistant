@@ -50,18 +50,6 @@ install-startup.bat
 uninstall-startup.bat
 ```
 
-## 如果右键菜单位置不稳定
-
-本工具默认不依赖“第几个菜单项”，而是读取右键菜单里的文字，所以比传统按方向键的脚本稳定。
-
-如果你的电脑上“加密菜单”位置特别靠后，也可以右键以管理员身份运行：
-
-```text
-run-reorder-ldmenuext-as-admin.bat
-```
-
-这个脚本会尝试把绿盾右键扩展提前，并会自动备份相关注册表项。
-
 ## 参数微调
 
 申请窗口弹出后，工具会等待文件列表加载完成，再点击“发送申请”。
@@ -89,8 +77,6 @@ install-startup.bat              设置开机自启
 uninstall-startup.bat            取消开机自启
 LdDecryptHotkey.cs               源码
 build-hotkey-tool.bat            重新编译源码
-run-reorder-ldmenuext-as-admin.bat 可选：尝试提前绿盾右键菜单
-reorder-ldmenuext-admin.ps1      可选：注册表排序脚本
 ```
 
 ## 运行环境
