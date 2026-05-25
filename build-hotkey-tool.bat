@@ -1,0 +1,3 @@
+@echo off
+set CSC=%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe
+"%CSC%" /nologo /target:winexe /platform:x64 /out:"%~dp0LdDecryptHotkey.exe" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:"%WINDIR%\Microsoft.NET\assembly\GAC_MSIL\UIAutomationClient\v4.0_4.0.0.0__31bf3856ad364e35\UIAutomationClient.dll" /reference:"%WINDIR%\Microsoft.NET\assembly\GAC_MSIL\UIAutomationTypes\v4.0_4.0.0.0__31bf3856ad364e35\UIAutomationTypes.dll" /reference:"%WINDIR%\Microsoft.NET\assembly\GAC_MSIL\WindowsBase\v4.0_4.0.0.0__31bf3856ad364e35\WindowsBase.dll" "%~dp0LdDecryptHotkey.cs"
