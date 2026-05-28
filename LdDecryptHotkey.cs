@@ -16,7 +16,10 @@ internal static class LdDecryptHotkey
     private const uint KeyeventfKeyup = 0x0002;
     private const uint MouseeventfLeftdown = 0x0002;
     private const uint MouseeventfLeftup = 0x0004;
+    private const uint MouseeventfRightdown = 0x0008;
+    private const uint MouseeventfRightup = 0x0010;
     private const int MnGethmenu = 0x01E1;
+    private const string StartupShortcutName = "Lvdun Auto Decryption.lnk";
     private static readonly string LogPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LdDecryptHotkey.log");
 
     [DllImport("user32.dll")]
@@ -110,6 +113,9 @@ internal static class LdDecryptHotkey
                 Visible = true,
                 ContextMenuStrip = new ContextMenuStrip()
             };
+            tray.ContextMenuStrip.Items.Add("\u8bbe\u7f6e\u5f00\u673a\u81ea\u542f", null, delegate { InstallStartup(); });
+            tray.ContextMenuStrip.Items.Add("\u53d6\u6d88\u5f00\u673a\u81ea\u542f", null, delegate { UninstallStartup(); });
+            tray.ContextMenuStrip.Items.Add(new ToolStripSeparator());
             tray.ContextMenuStrip.Items.Add("\u9000\u51fa", null, delegate { Close(); });
 
             Load += delegate
@@ -163,9 +169,7 @@ internal static class LdDecryptHotkey
         Log("F8");
         SendEsc();
         Thread.Sleep(120);
-        SendShiftF10();
-
-        var menu = WaitForPopupMenuItem(new[] { "\u52a0\u5bc6\u83dc\u5355" }, 3500);
+        var menu = OpenMenuAndFindEncryptionMenu();
         if (menu == null)
             throw new InvalidOperationException("\u6ca1\u6709\u627e\u5230\u201c\u52a0\u5bc6\u83dc\u5355\u201d\u3002\u8bf7\u786e\u8ba4\u6587\u4ef6\u5df2\u9009\u4e2d\uff0c\u4e14\u53f3\u952e\u83dc\u5355\u91cc\u80fd\u770b\u5230\u5b83\u3002");
 
@@ -194,6 +198,31 @@ internal static class LdDecryptHotkey
         Thread.Sleep(ApplyWindowReadyDelayMs);
         ClickSendApplyButton(applyWindow);
         Log("send apply clicked");
+    }
+
+    private static MenuHit OpenMenuAndFindEncryptionMenu()
+    {
+        var needles = new[] { "\u52a0\u5bc6\u83dc\u5355" };
+
+        Log("open menu: shift+appskey");
+        SendEsc();
+        Thread.Sleep(100);
+        SendShiftAppsKey();
+        var menu = WaitForPopupMenuItem(needles, 2500);
+        if (menu != null) return menu;
+
+        Log("open menu fallback: shift+f10");
+        SendEsc();
+        Thread.Sleep(100);
+        SendShiftF10();
+        menu = WaitForPopupMenuItem(needles, 2500);
+        if (menu != null) return menu;
+
+        Log("open menu fallback: shift+rightclick");
+        SendEsc();
+        Thread.Sleep(100);
+        SendShiftRightClick();
+        return WaitForPopupMenuItem(needles, 2500);
     }
 
     private static AutomationElement WaitForButtonContains(string[] needles, int timeoutMs)
@@ -418,6 +447,23 @@ internal static class LdDecryptHotkey
         keybd_event(0x10, 0, KeyeventfKeyup, UIntPtr.Zero);
     }
 
+    private static void SendShiftAppsKey()
+    {
+        keybd_event(0x10, 0, 0, UIntPtr.Zero);
+        SendKey(0x5D);
+        keybd_event(0x10, 0, KeyeventfKeyup, UIntPtr.Zero);
+    }
+
+    private static void SendShiftRightClick()
+    {
+        keybd_event(0x10, 0, 0, UIntPtr.Zero);
+        Thread.Sleep(80);
+        mouse_event(MouseeventfRightdown, 0, 0, 0, UIntPtr.Zero);
+        mouse_event(MouseeventfRightup, 0, 0, 0, UIntPtr.Zero);
+        Thread.Sleep(80);
+        keybd_event(0x10, 0, KeyeventfKeyup, UIntPtr.Zero);
+    }
+
     private static void SendEsc()
     {
         SendKey(0x1B);
@@ -427,6 +473,50 @@ internal static class LdDecryptHotkey
     {
         keybd_event(vk, 0, 0, UIntPtr.Zero);
         keybd_event(vk, 0, KeyeventfKeyup, UIntPtr.Zero);
+    }
+
+    private static void InstallStartup()
+    {
+        try
+        {
+            var shortcutPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), StartupShortcutName);
+            var script = string.Format(
+                "$ws=New-Object -ComObject WScript.Shell; $s=$ws.CreateShortcut('{0}'); $s.TargetPath='{1}'; $s.WorkingDirectory='{2}'; $s.Save()",
+                shortcutPath.Replace("'", "''"),
+                Application.ExecutablePath.Replace("'", "''"),
+                AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\').Replace("'", "''"));
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = "-NoProfile -ExecutionPolicy Bypass -Command \"" + script + "\"",
+                CreateNoWindow = true,
+                UseShellExecute = false
+            }).WaitForExit();
+            Log("startup installed");
+            MessageBox.Show("\u5df2\u8bbe\u7f6e\u5f00\u673a\u81ea\u542f\u3002", "\u7eff\u76fe\u89e3\u5bc6 F8", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            Log("startup install error: " + ex);
+            MessageBox.Show("\u8bbe\u7f6e\u5f00\u673a\u81ea\u542f\u5931\u8d25\uff1a" + ex.Message, "\u7eff\u76fe\u89e3\u5bc6 F8", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    private static void UninstallStartup()
+    {
+        try
+        {
+            var shortcutPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), StartupShortcutName);
+            if (File.Exists(shortcutPath))
+                File.Delete(shortcutPath);
+            Log("startup uninstalled");
+            MessageBox.Show("\u5df2\u53d6\u6d88\u5f00\u673a\u81ea\u542f\u3002", "\u7eff\u76fe\u89e3\u5bc6 F8", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            Log("startup uninstall error: " + ex);
+            MessageBox.Show("\u53d6\u6d88\u5f00\u673a\u81ea\u542f\u5931\u8d25\uff1a" + ex.Message, "\u7eff\u76fe\u89e3\u5bc6 F8", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     private static void Log(string message)
