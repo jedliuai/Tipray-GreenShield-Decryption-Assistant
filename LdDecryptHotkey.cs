@@ -282,17 +282,17 @@ internal static class LdDecryptHotkey
     {
         var needles = new[] { "\u52a0\u5bc6\u83dc\u5355" };
 
-        Log("open menu: shift+appskey");
-        SendEsc();
-        Thread.Sleep(100);
-        SendShiftAppsKey();
-        var menu = WaitForPopupMenuItem(needles, 2500);
-        if (menu != null) return menu;
-
-        Log("open menu fallback: shift+f10");
+        Log("open menu: shift+f10");
         SendEsc();
         Thread.Sleep(100);
         SendShiftF10();
+        var menu = WaitForPopupMenuItem(needles, 2500);
+        if (menu != null) return menu;
+
+        Log("open menu fallback: shift+appskey");
+        SendEsc();
+        Thread.Sleep(100);
+        SendShiftAppsKey();
         menu = WaitForPopupMenuItem(needles, 2500);
         if (menu != null) return menu;
 
