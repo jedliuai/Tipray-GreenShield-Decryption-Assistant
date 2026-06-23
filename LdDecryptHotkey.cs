@@ -84,14 +84,23 @@ internal static class LdDecryptHotkey
     }
 
     [STAThread]
-    private static void Main()
+    private static int Main(string[] args)
     {
+        if (args.Length > 0)
+            return RunCli(args);
+
+#if CLI
+        PrintHelp();
+        return 0;
+#else
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         using (var window = new HotkeyWindow())
         {
             Application.Run(window);
         }
+        return 0;
+#endif
     }
 
     private sealed class HotkeyWindow : Form
@@ -113,8 +122,8 @@ internal static class LdDecryptHotkey
                 Visible = true,
                 ContextMenuStrip = new ContextMenuStrip()
             };
-            tray.ContextMenuStrip.Items.Add("\u8bbe\u7f6e\u5f00\u673a\u81ea\u542f", null, delegate { InstallStartup(); });
-            tray.ContextMenuStrip.Items.Add("\u53d6\u6d88\u5f00\u673a\u81ea\u542f", null, delegate { UninstallStartup(); });
+            tray.ContextMenuStrip.Items.Add("\u8bbe\u7f6e\u5f00\u673a\u81ea\u542f", null, delegate { InstallStartup(true); });
+            tray.ContextMenuStrip.Items.Add("\u53d6\u6d88\u5f00\u673a\u81ea\u542f", null, delegate { UninstallStartup(true); });
             tray.ContextMenuStrip.Items.Add(new ToolStripSeparator());
             tray.ContextMenuStrip.Items.Add("\u9000\u51fa", null, delegate { Close(); });
 
@@ -198,6 +207,73 @@ internal static class LdDecryptHotkey
         Thread.Sleep(ApplyWindowReadyDelayMs);
         ClickSendApplyButton(applyWindow);
         Log("send apply clicked");
+    }
+
+    private static int RunCli(string[] args)
+    {
+        var command = args[0].Trim().ToLowerInvariant();
+        try
+        {
+            switch (command)
+            {
+                case "--once":
+                case "once":
+                    Console.WriteLine("Running one decrypt-apply flow. Select a file in Explorer before using this command.");
+                    RunFlow();
+                    Console.WriteLine("Done.");
+                    return 0;
+
+                case "--install-startup":
+                case "install-startup":
+                    InstallStartup(false);
+                    Console.WriteLine("Startup enabled.");
+                    return 0;
+
+                case "--uninstall-startup":
+                case "uninstall-startup":
+                    UninstallStartup(false);
+                    Console.WriteLine("Startup disabled.");
+                    return 0;
+
+                case "--status":
+                case "status":
+                    Console.WriteLine("Startup: " + (IsStartupInstalled() ? "enabled" : "disabled"));
+                    Console.WriteLine("Log: " + LogPath);
+                    return 0;
+
+                case "--help":
+                case "-h":
+                case "/?":
+                case "help":
+                    PrintHelp();
+                    return 0;
+
+                default:
+                    Console.Error.WriteLine("Unknown command: " + args[0]);
+                    PrintHelp();
+                    return 2;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log("cli error: " + ex);
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
+    }
+
+    private static void PrintHelp()
+    {
+        Console.WriteLine("Lvdun Auto Decryption CLI");
+        Console.WriteLine();
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  LdDecryptHotkeyCli.exe --once              Run one F8 flow for the selected Explorer file");
+        Console.WriteLine("  LdDecryptHotkeyCli.exe --install-startup   Enable startup");
+        Console.WriteLine("  LdDecryptHotkeyCli.exe --uninstall-startup Disable startup");
+        Console.WriteLine("  LdDecryptHotkeyCli.exe --status            Show startup status and log path");
+        Console.WriteLine("  LdDecryptHotkeyCli.exe --help              Show help");
+        Console.WriteLine();
+        Console.WriteLine("For normal daily use, run LdDecryptHotkey.exe and press F8 in Explorer.");
     }
 
     private static MenuHit OpenMenuAndFindEncryptionMenu()
@@ -475,7 +551,7 @@ internal static class LdDecryptHotkey
         keybd_event(vk, 0, KeyeventfKeyup, UIntPtr.Zero);
     }
 
-    private static void InstallStartup()
+    private static void InstallStartup(bool showMessage)
     {
         try
         {
@@ -493,16 +569,20 @@ internal static class LdDecryptHotkey
                 UseShellExecute = false
             }).WaitForExit();
             Log("startup installed");
-            MessageBox.Show("\u5df2\u8bbe\u7f6e\u5f00\u673a\u81ea\u542f\u3002", "\u7eff\u76fe\u89e3\u5bc6 F8", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            if (showMessage)
+                MessageBox.Show("\u5df2\u8bbe\u7f6e\u5f00\u673a\u81ea\u542f\u3002", "\u7eff\u76fe\u89e3\u5bc6 F8", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
             Log("startup install error: " + ex);
-            MessageBox.Show("\u8bbe\u7f6e\u5f00\u673a\u81ea\u542f\u5931\u8d25\uff1a" + ex.Message, "\u7eff\u76fe\u89e3\u5bc6 F8", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            if (showMessage)
+                MessageBox.Show("\u8bbe\u7f6e\u5f00\u673a\u81ea\u542f\u5931\u8d25\uff1a" + ex.Message, "\u7eff\u76fe\u89e3\u5bc6 F8", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            else
+                throw;
         }
     }
 
-    private static void UninstallStartup()
+    private static void UninstallStartup(bool showMessage)
     {
         try
         {
@@ -510,13 +590,23 @@ internal static class LdDecryptHotkey
             if (File.Exists(shortcutPath))
                 File.Delete(shortcutPath);
             Log("startup uninstalled");
-            MessageBox.Show("\u5df2\u53d6\u6d88\u5f00\u673a\u81ea\u542f\u3002", "\u7eff\u76fe\u89e3\u5bc6 F8", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            if (showMessage)
+                MessageBox.Show("\u5df2\u53d6\u6d88\u5f00\u673a\u81ea\u542f\u3002", "\u7eff\u76fe\u89e3\u5bc6 F8", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
             Log("startup uninstall error: " + ex);
-            MessageBox.Show("\u53d6\u6d88\u5f00\u673a\u81ea\u542f\u5931\u8d25\uff1a" + ex.Message, "\u7eff\u76fe\u89e3\u5bc6 F8", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            if (showMessage)
+                MessageBox.Show("\u53d6\u6d88\u5f00\u673a\u81ea\u542f\u5931\u8d25\uff1a" + ex.Message, "\u7eff\u76fe\u89e3\u5bc6 F8", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            else
+                throw;
         }
+    }
+
+    private static bool IsStartupInstalled()
+    {
+        var shortcutPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), StartupShortcutName);
+        return File.Exists(shortcutPath);
     }
 
     private static void Log(string message)

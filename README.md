@@ -78,10 +78,31 @@ private const int ApplyWindowReadyDelayMs = 3500;
 
 修改后运行 `build-hotkey-tool.bat` 重新生成程序。
 
+## 命令行接口
+
+普通用户不需要看这一段。这个接口主要方便自动化、排查问题或远程协助。
+
+```text
+LdDecryptHotkeyCli.exe --once
+LdDecryptHotkeyCli.exe --install-startup
+LdDecryptHotkeyCli.exe --uninstall-startup
+LdDecryptHotkeyCli.exe --status
+LdDecryptHotkeyCli.exe --help
+```
+
+常用说明：
+
+- `--once`：对当前资源管理器里选中的文件执行一次完整申请流程
+- `--install-startup`：设置开机自启
+- `--uninstall-startup`：取消开机自启
+- `--status`：查看开机自启状态和日志位置
+- `--help`：查看命令帮助
+
 ## 文件说明
 
 ```text
 LdDecryptHotkey.exe              主程序，直接运行即可
+LdDecryptHotkeyCli.exe           命令行版本，方便自动化调用
 start-ld-decrypt-hotkey.bat      启动主程序
 install-startup.bat              设置开机自启
 uninstall-startup.bat            取消开机自启
