@@ -19,6 +19,7 @@ internal static class LdDecryptHotkey
     private const uint MouseeventfRightdown = 0x0008;
     private const uint MouseeventfRightup = 0x0010;
     private const int MnGethmenu = 0x01E1;
+    private const int WmClose = 0x0010;
     private const string StartupShortcutName = "Lvdun Auto Decryption.lnk";
     private static readonly string LogPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LdDecryptHotkey.log");
 
@@ -176,6 +177,7 @@ internal static class LdDecryptHotkey
     private static void RunFlow()
     {
         Log("F8");
+        CloseExistingApplyWindows();
         SendEsc();
         Thread.Sleep(120);
         var menu = OpenMenuAndFindEncryptionMenu();
@@ -396,9 +398,36 @@ internal static class LdDecryptHotkey
         return IntPtr.Zero;
     }
 
+    private static void CloseExistingApplyWindows()
+    {
+        var windows = FindWindowsTitleContains(new[] { "\u65b0\u5efa\u7533\u8bf7", "\u6587\u4ef6\u89e3\u5bc6\u7533\u8bf7" });
+        if (windows.Count == 0)
+            return;
+
+        foreach (var hwnd in windows)
+        {
+            Log("closing stale apply window: " + GetTitle(hwnd));
+            SendMessage(hwnd, WmClose, IntPtr.Zero, IntPtr.Zero);
+        }
+
+        var deadline = Environment.TickCount + 2500;
+        while (Environment.TickCount < deadline)
+        {
+            if (FindWindowsTitleContains(new[] { "\u65b0\u5efa\u7533\u8bf7", "\u6587\u4ef6\u89e3\u5bc6\u7533\u8bf7" }).Count == 0)
+                return;
+            Thread.Sleep(100);
+        }
+    }
+
     private static IntPtr FindWindowTitleContains(string[] needles)
     {
-        var result = IntPtr.Zero;
+        var windows = FindWindowsTitleContains(needles);
+        return windows.Count > 0 ? windows[0] : IntPtr.Zero;
+    }
+
+    private static System.Collections.Generic.List<IntPtr> FindWindowsTitleContains(string[] needles)
+    {
+        var results = new System.Collections.Generic.List<IntPtr>();
         EnumWindows(delegate (IntPtr hwnd, IntPtr lParam)
         {
             if (!IsWindowVisible(hwnd))
@@ -409,13 +438,13 @@ internal static class LdDecryptHotkey
             {
                 if (title.IndexOf(Normalize(needle), StringComparison.OrdinalIgnoreCase) >= 0)
                 {
-                    result = hwnd;
-                    return false;
+                    results.Add(hwnd);
+                    return true;
                 }
             }
             return true;
         }, IntPtr.Zero);
-        return result;
+        return results;
     }
 
     private static string GetMenuText(IntPtr hmenu, int index)
