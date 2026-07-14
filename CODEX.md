@@ -58,7 +58,7 @@ D:\Documents\GitHub\绿盾解密\GreenShieldQuickApply\LdDecryptHotkeyCli.exe
 
 执行 `--once` 前，需要用户先在 Windows 资源管理器里选中文件。
 
-如果没有选中文件，或者绿盾右键菜单没有出现，命令可能会失败。
+程序会优先选择最近使用的资源管理器窗口，并要求其中只有一个明确选中的文件。如果无法确定目标，命令会停止，不会拿其他窗口里残留选中的旧文件继续申请。
 
 ## 日志位置
 
@@ -87,5 +87,6 @@ https://github.com/jedliuai/Lvdun-Auto-Decryption/releases
 - 不要要求用户安装 AutoHotkey；本工具不依赖 AutoHotkey。
 - 不要要求用户永久修改 Win11 右键菜单；程序内置兼容逻辑。
 - 不要覆盖旧 Release；有新功能时递增版本号。
+- 排查“申请了旧文件”时，先在日志里找 `target:`，它后面是程序实际锁定的文件名和资源管理器窗口。
 - 普通用户使用 `LdDecryptHotkey.exe`。
 - Codex 使用 `LdDecryptHotkeyCli.exe`。

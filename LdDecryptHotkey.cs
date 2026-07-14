@@ -36,6 +36,12 @@ internal static class LdDecryptHotkey
     private static extern bool SetCursorPos(int x, int y);
 
     [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
     private static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
 
     [DllImport("user32.dll")]
@@ -81,6 +87,13 @@ internal static class LdDecryptHotkey
         public IntPtr Hmenu;
         public int Index;
         public string Text;
+        public Rect Rect;
+    }
+
+    private sealed class ExplorerTarget
+    {
+        public IntPtr Hwnd;
+        public string Name;
         public Rect Rect;
     }
 
@@ -150,11 +163,12 @@ internal static class LdDecryptHotkey
                 if (!busy)
                 {
                     busy = true;
+                    var sourceWindow = GetForegroundWindow();
                     ThreadPool.QueueUserWorkItem(delegate
                     {
                         try
                         {
-                            RunFlow();
+                            RunFlow(sourceWindow, false);
                         }
                         catch (Exception ex)
                         {
@@ -174,13 +188,20 @@ internal static class LdDecryptHotkey
         }
     }
 
-    private static void RunFlow()
+    private static void RunFlow(IntPtr sourceWindow, bool allowExplorerFallback)
     {
         Log("F8");
+        var target = FindSelectedExplorerTarget(sourceWindow);
+        if (target == null && allowExplorerFallback)
+            target = FindMostRecentSelectedExplorerTarget();
+        if (target == null)
+            throw new InvalidOperationException("\u6ca1\u6709\u627e\u5230\u5f53\u524d\u8d44\u6e90\u7ba1\u7406\u5668\u4e2d\u660e\u786e\u9009\u4e2d\u7684\u5355\u4e2a\u6587\u4ef6\u3002\u8bf7\u5148\u5355\u51fb\u6587\u4ef6\uff0c\u518d\u6309 F8\u3002");
+
+        Log("target: " + target.Name + " | hwnd=" + target.Hwnd + " | window=" + GetTitle(target.Hwnd));
         CloseExistingApplyWindows();
         SendEsc();
         Thread.Sleep(120);
-        var menu = OpenMenuAndFindEncryptionMenu();
+        var menu = OpenMenuAndFindEncryptionMenu(target);
         if (menu == null)
             throw new InvalidOperationException("\u6ca1\u6709\u627e\u5230\u201c\u52a0\u5bc6\u83dc\u5355\u201d\u3002\u8bf7\u786e\u8ba4\u6587\u4ef6\u5df2\u9009\u4e2d\uff0c\u4e14\u53f3\u952e\u83dc\u5355\u91cc\u80fd\u770b\u5230\u5b83\u3002");
 
@@ -221,7 +242,7 @@ internal static class LdDecryptHotkey
                 case "--once":
                 case "once":
                     Console.WriteLine("Running one decrypt-apply flow. Select a file in Explorer before using this command.");
-                    RunFlow();
+                    RunFlow(GetForegroundWindow(), true);
                     Console.WriteLine("Done.");
                     return 0;
 
@@ -278,29 +299,115 @@ internal static class LdDecryptHotkey
         Console.WriteLine("For normal daily use, run LdDecryptHotkey.exe and press F8 in Explorer.");
     }
 
-    private static MenuHit OpenMenuAndFindEncryptionMenu()
+    private static MenuHit OpenMenuAndFindEncryptionMenu(ExplorerTarget target)
     {
         var needles = new[] { "\u52a0\u5bc6\u83dc\u5355" };
 
-        Log("open menu: shift+f10");
+        Log("open menu: targeted shift+rightclick");
         SendEsc();
         Thread.Sleep(100);
-        SendShiftF10();
+        SetForegroundWindow(target.Hwnd);
+        Thread.Sleep(150);
+        MoveCursorToTarget(target);
+        SendShiftRightClick();
         var menu = WaitForPopupMenuItem(needles, 2500);
+        if (menu != null) return menu;
+
+        // The targeted right-click also gives the exact item keyboard focus.
+        Log("open menu fallback: shift+f10");
+        SendEsc();
+        Thread.Sleep(100);
+        SetForegroundWindow(target.Hwnd);
+        SendShiftF10();
+        menu = WaitForPopupMenuItem(needles, 2500);
         if (menu != null) return menu;
 
         Log("open menu fallback: shift+appskey");
         SendEsc();
         Thread.Sleep(100);
+        SetForegroundWindow(target.Hwnd);
         SendShiftAppsKey();
-        menu = WaitForPopupMenuItem(needles, 2500);
-        if (menu != null) return menu;
-
-        Log("open menu fallback: shift+rightclick");
-        SendEsc();
-        Thread.Sleep(100);
-        SendShiftRightClick();
         return WaitForPopupMenuItem(needles, 2500);
+    }
+
+    private static ExplorerTarget FindSelectedExplorerTarget(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero || !IsExplorerWindow(hwnd))
+            return null;
+
+        try
+        {
+            var root = AutomationElement.FromHandle(hwnd);
+            var items = root.FindAll(
+                TreeScope.Descendants,
+                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem));
+            ExplorerTarget result = null;
+            var selectedCount = 0;
+
+            for (var i = 0; i < items.Count; i++)
+            {
+                object pattern;
+                if (!items[i].TryGetCurrentPattern(SelectionItemPattern.Pattern, out pattern))
+                    continue;
+                if (!((SelectionItemPattern)pattern).Current.IsSelected || items[i].Current.IsOffscreen)
+                    continue;
+
+                var bounds = items[i].Current.BoundingRectangle;
+                if (bounds.IsEmpty || bounds.Width < 4 || bounds.Height < 4)
+                    continue;
+
+                selectedCount++;
+                result = new ExplorerTarget
+                {
+                    Hwnd = hwnd,
+                    Name = SafeName(items[i]),
+                    Rect = new Rect
+                    {
+                        Left = (int)bounds.Left,
+                        Top = (int)bounds.Top,
+                        Right = (int)bounds.Right,
+                        Bottom = (int)bounds.Bottom
+                    }
+                };
+            }
+
+            if (selectedCount == 1)
+                return result;
+
+            if (selectedCount > 1)
+                Log("target rejected: multiple selected items in hwnd=" + hwnd);
+        }
+        catch (Exception ex)
+        {
+            Log("target detection error: " + ex.Message);
+        }
+        return null;
+    }
+
+    private static ExplorerTarget FindMostRecentSelectedExplorerTarget()
+    {
+        ExplorerTarget result = null;
+        EnumWindows(delegate (IntPtr hwnd, IntPtr lParam)
+        {
+            result = FindSelectedExplorerTarget(hwnd);
+            return result == null;
+        }, IntPtr.Zero);
+        return result;
+    }
+
+    private static bool IsExplorerWindow(IntPtr hwnd)
+    {
+        var className = GetWindowClass(hwnd);
+        return className == "CabinetWClass" || className == "ExploreWClass";
+    }
+
+    private static void MoveCursorToTarget(ExplorerTarget target)
+    {
+        var width = target.Rect.Right - target.Rect.Left;
+        var x = target.Rect.Left + Math.Min(120, Math.Max(4, width / 2));
+        var y = (target.Rect.Top + target.Rect.Bottom) / 2;
+        SetCursorPos(x, y);
+        Thread.Sleep(100);
     }
 
     private static AutomationElement WaitForButtonContains(string[] needles, int timeoutMs)
