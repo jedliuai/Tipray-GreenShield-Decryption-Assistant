@@ -1,152 +1,247 @@
-# Lvdun Auto Decryption
+<div align="center">
 
-绿盾一键申请解密：把每天重复几十次的绿盾解密申请，压缩成一个 F8。
+# 🛡️ 绿盾 F8 极速申请解密
 
+### 选中文件，按下 F8。让繁琐的申请流程在一瞬间抵达终点。
 
-## 它解决什么问题
+[![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/jedliuai/Lvdun-Auto-Decryption)
+[![.NET Framework](https://img.shields.io/badge/.NET_Framework-4.x-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)](https://github.com/jedliuai/Lvdun-Auto-Decryption)
+[![Hotkey](https://img.shields.io/badge/快捷键-F8-00A86B?style=for-the-badge)](https://github.com/jedliuai/Lvdun-Auto-Decryption)
+[![Authorized Use](https://img.shields.io/badge/用途-授权环境-EF6C00?style=for-the-badge)](#合规与安全边界)
 
-很多安装了绿盾加密的电脑，在把文件发给客户或外部伙伴前，都需要先走一次“申请解密”流程。原本的操作通常是：
+**绿盾 · 绿盾解密 · 天锐绿盾 · 天锐绿盾解密 · 文件解密 · 申请解密 · DLP · 文档加密 · 透明加密 · Windows 自动化**
 
-选中文件 -> 右键 -> 加密菜单 -> 申请解密 -> 等窗口弹出 -> 点击发送申请。
+[快速开始](#-快速开始) · [为什么这么快](#-为什么这么快) · [命令行](#-命令行工具) · [故障排查](#-故障排查)
 
-这个工具把这段重复操作自动化。你只需要在资源管理器里选中文件，按 `F8`，它会自动完成后面的点击流程。
+</div>
 
-## 它不做什么
+---
 
-这个工具不是破解工具，也不会绕过绿盾权限。
+## ✨ 它是什么
 
-它只是在你本来就有权限、并且本来可以手动点击“加密菜单 -> 申请解密”的前提下，帮你自动点击这些界面按钮。
+这是一个面向已安装**天锐绿盾 / 绿盾终端**的 Windows 效率工具。程序常驻系统托盘，读取资源管理器中当前明确选中的文件，并通过绿盾自己的本地菜单插件唤起官方申请程序；默认还会自动触发“发送申请”。
 
-## 适合谁
+它解决的是一个很朴素、却每天都在吞噬时间的问题：
 
-- 经常需要对单个文件发起绿盾解密申请的人
-- 每天反复右键、悬停、点击“申请解密”的人
-- 希望把高频重复动作变成一个快捷键的人
-- 不想研究脚本，只想解压后直接用的人
+> 右键 → 展开加密菜单 → 找到申请解密 → 等窗口 → 点击发送
 
-## 快速开始
+现在只剩：
 
-1. 解压整个文件夹。
-2. 双击 `start-ld-decrypt-hotkey.bat`。
-3. 托盘出现小盾牌图标后，打开资源管理器。
-4. 选中需要申请解密的文件。
-5. 按 `F8`。
+> **选中文件 → F8**
 
-工具会自动执行：
+## 🚀 为什么这么快
 
-选中文件 -> 打开右键菜单 -> 加密菜单 -> 申请解密 -> 等待申请窗口加载 -> 发送申请。
+旧版像一个很熟练的人：移动鼠标、打开菜单、识别菜单项、展开子菜单，再等待窗口出现。新版则找到了这串点击最终调用的**本地入口**，跳过右键菜单这一层，直接把选中的文件路径交给绿盾官方组件。
 
-## 可选：开机自动启动
+| 环节 | 旧版：界面模拟 | 新版：本地直连 |
+|---|---:|---:|
+| 打开 Windows 右键菜单 | 需要 | 跳过 |
+| 兼容 Win11 新/旧菜单 | 需要多轮尝试 | 不需要 |
+| 查找“加密菜单” | 需要 | 跳过 |
+| 展开并查找“申请解密” | 需要 | 跳过 |
+| 固定等待文件列表加载 | 约 3.5 秒 | 改为短轮询 |
+| 启动绿盾官方申请窗口 | 最终执行 | 直接执行 |
+| 官方审批链路 | 保留 | 保留 |
 
-如果希望每天开机后自动启用快捷键，有两种方式：
+```mermaid
+flowchart LR
+    A[资源管理器选中文件] --> B[按 F8]
+    B --> C[读取精确文件路径]
+    C --> D[LdMenuPlug.dll 本地命令]
+    D --> E[绿盾官方 LdApproval]
+    E --> F[发送解密申请]
 
-方式一：右键点击托盘里的小盾牌图标，选择“设置开机自启”。
+    classDef fast fill:#0f766e,color:#fff,stroke:#5eead4,stroke-width:2px;
+    classDef official fill:#1d4ed8,color:#fff,stroke:#93c5fd,stroke-width:2px;
+    class B,C,D fast;
+    class E,F official;
+```
 
-方式二：双击：
+托盘程序启动时还会提前初始化本地插件。这样按下 F8 时无需临时加载整套菜单组件，响应会进一步缩短。实际剩余耗时主要来自绿盾官方 `LdApproval` 窗口自身的启动与渲染。
+
+## ⚡ 快速开始
+
+### 1. 启动
+
+双击：
+
+```text
+start-ld-decrypt-hotkey.bat
+```
+
+看到系统托盘里的小盾牌，即代表 F8 已就绪。
+
+### 2. 使用
+
+1. 在 Windows 资源管理器或桌面选中一个或多个文件。
+2. 按 `F8`。
+3. 工具调用绿盾官方申请窗口并发送申请。
+
+> 当前直连版本只接受文件，不接受文件夹。若要批量处理，请进入文件夹后多选文件。
+
+### 3. 设置开机自启（可选）
+
+右键托盘小盾牌并选择“设置开机自启”，或者双击：
 
 ```text
 install-startup.bat
 ```
 
-如果以后不想开机启动，可以右键点击托盘里的小盾牌图标，选择“取消开机自启”，也可以双击：
+取消自启可运行 `uninstall-startup.bat`。
 
-```text
-uninstall-startup.bat
+## 🧭 新旧工作方式
+
+```mermaid
+flowchart TB
+    subgraph OLD[旧版 · 人类点击模拟]
+      O1[锁定文件] --> O2[Shift + 右键]
+      O2 --> O3[枚举经典菜单]
+      O3 --> O4[悬停加密菜单]
+      O4 --> O5[点击申请解密]
+      O5 --> O6[固定等待]
+    end
+
+    subgraph NEW[新版 · 绿盾本地直连]
+      N1[锁定文件] --> N2[构造本地命令]
+      N2 --> N3[调用官方插件]
+      N3 --> N4[短轮询发送按钮]
+    end
+
+    O6 --> R[官方申请程序]
+    N4 --> R
 ```
 
-## Win11 右键菜单
+旧版源代码没有从 Git 历史中消失。需要研究、比较或恢复时，可查看 [`47d4f68` 历史快照](https://github.com/jedliuai/Lvdun-Auto-Decryption/tree/47d4f68)。当前分支只保留更快、更清晰的直连实现。
 
-Win11 默认是新版右键菜单，有些电脑需要按住 Shift 才会出现老版菜单。
+## 🧰 命令行工具
 
-这个工具已经内置兼容逻辑：按 `F8` 后会先锁定当前选中的文件，再在这个文件上自动执行 `Shift + 右击` 打开兼容菜单，不需要你手动修改系统右键菜单。
-
-## 参数微调
-
-申请窗口弹出后，工具会等待文件列表加载完成，再点击“发送申请”。
-
-如果你的电脑比较慢，可以修改 `LdDecryptHotkey.cs` 里的这一行：
-
-```csharp
-private const int ApplyWindowReadyDelayMs = 3500;
-```
-
-单位是毫秒。比如：
-
-- `3500` 表示 3.5 秒
-- `5000` 表示 5 秒
-- `8000` 表示 8 秒
-
-修改后运行 `build-hotkey-tool.bat` 重新生成程序。
-
-## 命令行接口
-
-普通用户不需要看这一段。这个接口主要方便自动化、排查问题或远程协助。
+普通使用只需托盘版。CLI 适合诊断、自动化和人工核对：
 
 ```text
 LdDecryptHotkeyCli.exe --once
+LdDecryptHotkeyCli.exe --prepare-once [HWND]
+LdDecryptHotkeyCli.exe --list-selected [HWND]
+LdDecryptHotkeyCli.exe --probe-direct
 LdDecryptHotkeyCli.exe --install-startup
 LdDecryptHotkeyCli.exe --uninstall-startup
 LdDecryptHotkeyCli.exe --status
 LdDecryptHotkeyCli.exe --help
 ```
 
-常用说明：
+| 命令 | 作用 | 会发送申请吗 |
+|---|---|:---:|
+| `--once` | 对当前选中文件执行完整流程 | ✅ |
+| `--prepare-once` | 只打开官方申请窗口，供人工核对 | ❌ |
+| `--list-selected` | 打印程序识别到的文件路径 | ❌ |
+| `--probe-direct` | 检查本地插件及策略是否支持直连 | ❌ |
+| `--status` | 查看开机自启状态与日志路径 | ❌ |
 
-- `--once`：对当前资源管理器里选中的文件执行一次完整申请流程
-- `--install-startup`：设置开机自启
-- `--uninstall-startup`：取消开机自启
-- `--status`：查看开机自启状态和日志位置
-- `--help`：查看命令帮助
+## 🧩 技术原理
 
-## 文件说明
+当前适配的绿盾右键扩展会通过 `LdMenuPlug.dll` 处理“申请解密”菜单。工具复现的是菜单扩展与该本地插件之间的调用，不是服务端网络协议：
+
+1. 通过 Windows Shell COM 获取资源管理器里真实选中的完整路径。
+2. 桌面场景使用 UI Automation 作为路径识别补充。
+3. 检查本机策略是否启用了“申请解密”菜单类型。
+4. 按插件要求分别传入系统编码路径和 Unicode 路径。
+5. 多选时在最后一个文件上标记批次结束。
+6. 等待官方申请窗口，并优先通过 UI Automation 调用发送按钮。
+
+程序不会读取或改写文件正文，因此也避开了“透明读取后另存为明文、随即又被终端重新加密”的循环。
+
+## 🛡️ 合规与安全边界
+
+这个项目是**授权环境下的流程提速工具**，不是破解工具。
+
+- 不绕过用户已有权限或绿盾审批。
+- 不伪造、抓取或重放远程服务器通信。
+- 不修改绿盾数据库、驱动、策略或文件密文。
+- 不创建所谓的明文副本，不碰源文件内容。
+- 只在本机策略明确开放“申请解密”时工作。
+- 每次执行都会写入 `LdDecryptHotkey.log` 方便审计和排错。
+
+请只处理你有权申请解密的文件，并遵守所在组织的数据安全制度。
+
+## 🖥️ 兼容性
+
+| 项目 | 要求 |
+|---|---|
+| 操作系统 | Windows 10 / Windows 11 x64 |
+| 运行时 | .NET Framework 4.x |
+| 终端软件 | 已安装天锐绿盾客户端 |
+| 本地组件 | `C:\Inetpub\ftproot\Tipray\LdTerm\LdMenuPlug.dll` |
+| 权限 | 当前用户本来就能手动发起“申请解密” |
+
+绿盾升级后若安装路径、导出函数或本地命令结构发生变化，`--probe-direct` 会帮助快速定位兼容性问题。
+
+## 🔧 编译
+
+无需 Visual Studio。双击或在终端运行：
 
 ```text
-LdDecryptHotkey.exe              主程序，直接运行即可
-LdDecryptHotkeyCli.exe           命令行版本，方便自动化调用
-start-ld-decrypt-hotkey.bat      启动主程序
-install-startup.bat              设置开机自启
-uninstall-startup.bat            取消开机自启
-LdDecryptHotkey.cs               源码
-build-hotkey-tool.bat            重新编译源码
+build-hotkey-tool.bat
 ```
 
-## 运行环境
+构建产物：
 
-- Windows
-- 已安装绿盾客户端
-- 用户本身有权限手动发起“申请解密”
-- 普通使用不需要管理员权限
+- `LdDecryptHotkey.exe` — 托盘程序、全局 F8 快捷键。
+- `LdDecryptHotkeyCli.exe` — 命令行与诊断入口。
 
-## 常见问题
+## 📦 项目结构
 
-### 按 F8 没反应
+```text
+GreenShieldQuickApply/
+├─ LdDecryptHotkey.cs          # 核心源码
+├─ LdDecryptHotkey.exe         # 托盘版
+├─ LdDecryptHotkeyCli.exe      # CLI 版
+├─ build-hotkey-tool.bat       # 一键编译
+├─ start-ld-decrypt-hotkey.bat # 一键启动
+├─ install-startup.bat         # 安装开机自启
+├─ uninstall-startup.bat       # 取消开机自启
+├─ CODEX.md                    # 自动化维护说明
+└─ worklog/                    # 中文开发记录
+```
 
-先确认 `LdDecryptHotkey.exe` 正在运行，托盘里能看到小盾牌图标。如果没有，双击 `start-ld-decrypt-hotkey.bat`。
+## 🧯 故障排查
 
-### Win11 新版右键菜单能用吗
+<details>
+<summary><strong>按 F8 没反应</strong></summary>
 
-可以。工具会自动尝试兼容 Win11 的老版右键菜单，不需要你永久修改系统设置。
+确认托盘中存在小盾牌；若没有，请重新运行 `start-ld-decrypt-hotkey.bat`。还可以执行 `LdDecryptHotkeyCli.exe --status` 查看日志位置。
 
-### 第一次能用，后面不能用
+</details>
 
-请确认使用的是最新版本。旧版本曾经会在等待窗口按钮时卡住，新版本已经修复。
+<details>
+<summary><strong>提示没有选中文件</strong></summary>
 
-### 解密压缩包后，为什么后面仍然申请旧压缩包
+先单击资源管理器或桌面里的目标文件，再按 F8。使用 `--list-selected` 可以查看程序实际识别到的路径。
 
-旧版本依赖资源管理器的键盘焦点。压缩包操作有时会让旧文件继续保留焦点，即使画面上已经选择了其他文件，也可能再次打开旧压缩包的菜单。
+</details>
 
-新版本会在按下 `F8` 的瞬间锁定当前资源管理器和唯一选中的文件，并直接在目标文件上打开右键菜单。无法明确识别目标时会停止，不会继续提交旧文件。
+<details>
+<summary><strong>提示本地接口不可用</strong></summary>
 
-### 点得太快，文件还没加载出来
+运行 `LdDecryptHotkeyCli.exe --probe-direct`。检查绿盾是否安装在兼容路径，以及当前单位策略是否提供“申请解密”。
 
-调大 `ApplyWindowReadyDelayMs`，重新运行 `build-hotkey-tool.bat`。
+</details>
 
-### 这个工具安全吗
+<details>
+<summary><strong>为什么不再提供透明解密副本</strong></summary>
 
-它不会读取文件内容，不会上传文件，也不会修改绿盾加密策略。它只做本地界面自动点击。
+在受控扩展名策略下，明文一旦写回 `.docx`、`.xlsx`、`.pdf` 等文件，就会立即再次进入加密流程。直连官方申请链路速度更快，也更稳定、可审计。
 
-## 设计目标
+</details>
 
-一个目标：少点几下。
+## 🔎 相关关键词
 
-当一件事每天重复很多次，就应该让电脑替你做。
+`绿盾` `绿盾解密` `天锐绿盾` `天锐绿盾解密` `绿盾申请解密` `天锐绿盾申请解密` `绿盾文件解密` `绿盾快捷键` `DLP` `数据防泄漏` `文档加密` `文件加密` `透明加密` `终端加密` `Windows 文件解密` `F8 解密申请` `LdApproval` `LdMenuPlug`
+
+---
+
+<div align="center">
+
+### 一次 F8，省下每天无数次重复点击。
+
+如果这个项目让你的工作流更顺手，欢迎点亮 ⭐ Star。
+
+</div>

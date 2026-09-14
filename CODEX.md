@@ -1,6 +1,6 @@
 # Codex 使用说明
 
-这是绿盾一键申请解密工具。普通用户日常使用托盘版，Codex 自动化或排查问题时使用 CLI 版。
+这是天锐绿盾 F8 快速申请解密工具。普通用户使用托盘版；自动化、诊断和人工核对使用 CLI 版。
 
 ## 项目路径
 
@@ -10,83 +10,49 @@ D:\Documents\GitHub\绿盾解密\GreenShieldQuickApply
 
 ## 程序入口
 
-托盘版主程序：
+- 托盘版：`LdDecryptHotkey.exe`
+- 命令行版：`LdDecryptHotkeyCli.exe`
+- 构建脚本：`build-hotkey-tool.bat`
+- 日志：`LdDecryptHotkey.log`
 
-```text
-D:\Documents\GitHub\绿盾解密\GreenShieldQuickApply\LdDecryptHotkey.exe
-```
-
-CLI 程序：
-
-```text
-D:\Documents\GitHub\绿盾解密\GreenShieldQuickApply\LdDecryptHotkeyCli.exe
-```
-
-## 给 Codex 的常用命令
-
-查看状态：
+## 常用命令
 
 ```powershell
-& "D:\Documents\GitHub\绿盾解密\GreenShieldQuickApply\LdDecryptHotkeyCli.exe" --status
+& ".\LdDecryptHotkeyCli.exe" --status
+& ".\LdDecryptHotkeyCli.exe" --list-selected
+& ".\LdDecryptHotkeyCli.exe" --probe-direct
+& ".\LdDecryptHotkeyCli.exe" --prepare-once
+& ".\LdDecryptHotkeyCli.exe" --once
 ```
 
-执行一次申请流程：
+- `--list-selected` 只检查当前选中的路径。
+- `--probe-direct` 只检查本地插件和策略，不会发申请。
+- `--prepare-once` 会打开官方申请窗口，但不会发送。
+- `--once` 会执行完整申请并自动发送，运行前必须获得用户明确授权。
 
-```powershell
-& "D:\Documents\GitHub\绿盾解密\GreenShieldQuickApply\LdDecryptHotkeyCli.exe" --once
-```
+## 当前实现
 
-设置开机自启：
-
-```powershell
-& "D:\Documents\GitHub\绿盾解密\GreenShieldQuickApply\LdDecryptHotkeyCli.exe" --install-startup
-```
-
-取消开机自启：
-
-```powershell
-& "D:\Documents\GitHub\绿盾解密\GreenShieldQuickApply\LdDecryptHotkeyCli.exe" --uninstall-startup
-```
-
-查看帮助：
-
-```powershell
-& "D:\Documents\GitHub\绿盾解密\GreenShieldQuickApply\LdDecryptHotkeyCli.exe" --help
-```
-
-## 使用前提
-
-执行 `--once` 前，需要用户先在 Windows 资源管理器里选中文件。
-
-程序会优先选择最近使用的资源管理器窗口，并要求其中只有一个明确选中的文件。如果无法确定目标，命令会停止，不会拿其他窗口里残留选中的旧文件继续申请。
-
-## 日志位置
+程序直接调用本机绿盾组件：
 
 ```text
-D:\Documents\GitHub\绿盾解密\GreenShieldQuickApply\LdDecryptHotkey.log
+C:\Inetpub\ftproot\Tipray\LdTerm\LdMenuPlug.dll
 ```
 
-排查问题时优先读取这个日志。
+当前源码不再保留右键菜单模拟点击流程。旧实现仍可从 Git 提交 `47d4f68` 查看或恢复，不要重写历史。
 
-## 版本发布
+资源管理器支持一个或多个文件；桌面选择也受支持。直连模式不接受文件夹。无法确定文件时必须停止，不能复用其他窗口中的旧选择。
 
-当前 GitHub 仓库：
+## 维护注意事项
 
-```text
-https://github.com/jedliuai/Lvdun-Auto-Decryption
-```
+- 不要要求用户安装 AutoHotkey。
+- 不要要求用户修改 Windows 11 右键菜单。
+- 不要以透明复制作为默认方案：受控扩展名写回后会被立即重新加密。
+- 排查前先运行 `--probe-direct` 和 `--list-selected`，再查看日志中的 `source:`、`target:`、`direct signal sent`。
+- 不要通过 CLI 测试 `--once`，除非用户确实希望发送申请；优先用 `--prepare-once`。
+- 绿盾升级后要重新验证 DLL 路径、导出函数、菜单类型和命令结构。
+- 发布新功能时递增版本，不覆盖已有 Release。
 
-Release 下载页：
+## GitHub
 
-```text
-https://github.com/jedliuai/Lvdun-Auto-Decryption/releases
-```
-
-## 注意事项
-
-- 不要要求用户安装 AutoHotkey；本工具不依赖 AutoHotkey。
-- 不要要求用户永久修改 Win11 右键菜单；程序内置兼容逻辑。
-- 不要覆盖旧 Release；有新功能时递增版本号。
-- 排查“申请了旧文件”时，先在日志里找 `target:`，它后面是程序实际锁定的文件名和资源管理器窗口。
-- 普通用户使用 `LdDecryptHotkey.exe`。
-- Codex 使用 `LdDecryptHotkeyCli.exe`。
+- 仓库：https://github.com/jedliuai/Lvdun-Auto-Decryption
+- Releases：https://github.com/jedliuai/Lvdun-Auto-Decryption/releases
