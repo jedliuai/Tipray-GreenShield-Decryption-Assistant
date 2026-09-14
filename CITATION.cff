@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If this project helps your work, please cite it using the metadata below."
+title: "Tipray Green Shield Decryption Assistant"
+type: software
+authors:
+  - family-names: "Liu"
+    given-names: "Jed"
+    alias: "jedliuai"
+repository-code: "https://github.com/jedliuai/Tipray-GreenShield-Decryption-Assistant"
+url: "https://github.com/jedliuai/Tipray-GreenShield-Decryption-Assistant/releases/latest"
+version: 1.4.1
+date-released: 2026-09-14
+abstract: "A Windows F8 helper and local MCP server for authorized Tipray Green Shield decryption requests, supporting files, folders, and AI-agent task resumption while preserving the official approval workflow."
+keywords:
+  - "Tipray Green Shield"
+  - "天锐绿盾"
+  - "authorized decryption request"
+  - "Model Context Protocol"
+  - "AI agent"
+  - "Windows automation"
+  - "data loss prevention"

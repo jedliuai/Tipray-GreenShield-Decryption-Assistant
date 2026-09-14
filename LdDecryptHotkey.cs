@@ -24,7 +24,7 @@ internal static class LdDecryptHotkey
     private const int LdCommandDataSize = 512;
     private const int MaxTrackedFiles = 10000;
     private const string McpPipeName = "GreenShieldQuickApply.Mcp.v1";
-    private const string ServiceVersion = "1.4.0";
+    private const string ServiceVersion = "1.4.1";
     private const uint MouseeventfLeftdown = 0x0002;
     private const uint MouseeventfLeftup = 0x0004;
     private const string StartupShortcutName = "Lvdun Auto Decryption.lnk";

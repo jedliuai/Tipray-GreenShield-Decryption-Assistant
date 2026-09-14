@@ -1,8 +1,11 @@
 {
   "mcpServers": {
     "green-shield-decryption": {
-      "command": "D:\\Documents\\GitHub\\绿盾解密\\GreenShieldQuickApply\\LdDecryptMcp.exe",
-      "args": []
+      "command": "./bin/LdDecryptMcp.exe",
+      "args": [],
+      "cwd": ".",
+      "startup_timeout_sec": 30,
+      "tool_timeout_sec": 610
     }
   }
 }

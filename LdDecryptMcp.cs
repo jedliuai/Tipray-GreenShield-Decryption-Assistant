@@ -12,7 +12,7 @@ internal static class LdDecryptMcp
 {
     private const string PipeName = "GreenShieldQuickApply.Mcp.v1";
     private const string ServerName = "green-shield-decryption";
-    private const string ServerVersion = "1.4.0";
+    private const string ServerVersion = "1.4.1";
     private const string ModernProtocolVersion = "2026-07-28";
     private static readonly string[] LegacyProtocolVersions =
     {

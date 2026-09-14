@@ -1,12 +1,12 @@
 {
   "name": "green-shield-decryption",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "让 Codex 和其他 MCP Agent 自动识别用户授权路径中的绿盾加密文件，提交官方解密申请，等待明文就绪并继续原任务。",
   "author": {
     "name": "jedliuai"
   },
-  "homepage": "https://github.com/jedliuai/Lvdun-Auto-Decryption",
-  "repository": "https://github.com/jedliuai/Lvdun-Auto-Decryption",
+  "homepage": "https://github.com/jedliuai/Tipray-GreenShield-Decryption-Assistant",
+  "repository": "https://github.com/jedliuai/Tipray-GreenShield-Decryption-Assistant",
   "keywords": ["绿盾", "天锐绿盾", "解密", "透明解密", "MCP", "文件解密"],
   "skills": "./skills/",
   "interface": {

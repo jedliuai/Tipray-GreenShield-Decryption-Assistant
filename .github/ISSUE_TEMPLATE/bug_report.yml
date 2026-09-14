@@ -1,0 +1,50 @@
+name: 缺陷或兼容性问题
+description: 报告 F8、文件夹、MCP 或绿盾客户端兼容性问题
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: 提交前请删除日志中的组织名、用户名、文件名和其他敏感信息。安全问题请使用 Security Advisory 私下报告。
+  - type: input
+    id: windows
+    attributes:
+      label: Windows 版本
+      placeholder: Windows 11 24H2 x64
+    validations:
+      required: true
+  - type: input
+    id: tipray
+    attributes:
+      label: 天锐绿盾客户端版本
+      description: 如果无法找到版本号，请说明未知。
+    validations:
+      required: true
+  - type: dropdown
+    id: entry
+    attributes:
+      label: 使用入口
+      options:
+        - F8 托盘程序
+        - MCP / AI Agent
+        - CLI 诊断工具
+    validations:
+      required: true
+  - type: textarea
+    id: target
+    attributes:
+      label: 目标类型与操作步骤
+      description: 说明单个文件、多文件、文件夹或混合多选，以及可稳定复现的步骤。请勿粘贴敏感路径。
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: 实际结果与预期结果
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: 脱敏诊断信息
+      description: 可附上 --probe-direct、--status 或已脱敏日志的相关部分。

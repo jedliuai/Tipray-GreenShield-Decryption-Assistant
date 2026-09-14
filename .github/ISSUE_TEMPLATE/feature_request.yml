@@ -1,0 +1,25 @@
+name: 功能建议
+description: 提出与授权解密申请流程有关的改进建议
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 要解决的问题
+      description: 请先描述真实工作场景，而不是只描述一个实现方案。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: 授权边界
+      options:
+        - label: 该建议不会绕过绿盾权限、策略或官方审批链。
+          required: true

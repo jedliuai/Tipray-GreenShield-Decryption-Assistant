@@ -4,9 +4,7 @@
 
 ## 项目路径
 
-```text
-D:\Documents\GitHub\绿盾解密\GreenShieldQuickApply
-```
+以当前仓库根目录为准，不要依赖维护者电脑上的绝对路径。
 
 ## 程序入口
 
@@ -69,5 +67,5 @@ C:\Inetpub\ftproot\Tipray\LdTerm\LdMenuPlug.dll
 
 ## GitHub
 
-- 仓库：https://github.com/jedliuai/Lvdun-Auto-Decryption
-- Releases：https://github.com/jedliuai/Lvdun-Auto-Decryption/releases
+- 仓库：https://github.com/jedliuai/Tipray-GreenShield-Decryption-Assistant
+- Releases：https://github.com/jedliuai/Tipray-GreenShield-Decryption-Assistant/releases

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞报告
+    url: https://github.com/jedliuai/Tipray-GreenShield-Decryption-Assistant/security/advisories/new
+    about: 涉及授权边界、路径泄露或文件损坏的问题请私下报告
