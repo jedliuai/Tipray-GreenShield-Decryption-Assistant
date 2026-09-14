@@ -2,11 +2,12 @@
 
 # 🛡️ 绿盾 F8 极速申请解密
 
-### 选中文件或文件夹，按下 F8。让繁琐的申请流程在一瞬间抵达终点。
+### 人选中文件按 F8，Agent 遇到密文自动接管。让繁琐的申请流程在一瞬间抵达终点。
 
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/jedliuai/Lvdun-Auto-Decryption)
 [![.NET Framework](https://img.shields.io/badge/.NET_Framework-4.x-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)](https://github.com/jedliuai/Lvdun-Auto-Decryption)
 [![Hotkey](https://img.shields.io/badge/快捷键-F8-00A86B?style=for-the-badge)](https://github.com/jedliuai/Lvdun-Auto-Decryption)
+[![MCP](https://img.shields.io/badge/Agent-MCP-7C3AED?style=for-the-badge)](#-agent--mcp-自动解密)
 [![Authorized Use](https://img.shields.io/badge/用途-授权环境-EF6C00?style=for-the-badge)](#合规与安全边界)
 
 **绿盾 · 绿盾解密 · 天锐绿盾 · 天锐绿盾解密 · 文件解密 · 申请解密 · DLP · 文档加密 · 透明加密 · Windows 自动化**
@@ -19,7 +20,7 @@
 
 ## ✨ 它是什么
 
-这是一个面向已安装**天锐绿盾 / 绿盾终端**的 Windows 效率工具。程序常驻系统托盘，读取资源管理器中当前明确选中的文件，并通过绿盾自己的本地菜单插件唤起官方申请程序；默认还会自动触发“发送申请”。
+这是一个面向已安装**天锐绿盾 / 绿盾终端**的 Windows 效率工具。它同时提供两种入口：人可以在资源管理器里选中文件后按 `F8`；Codex 等 Agent 可以通过 MCP 检测用户指定的文件、申请解密、等待明文就绪，然后继续原来的文档任务。两种入口共用同一个托盘常驻程序和绿盾官方申请链。
 
 它解决的是一个很朴素、却每天都在吞噬时间的问题：
 
@@ -91,7 +92,35 @@ install-startup.bat
 
 ## 🤖 Agent / MCP 自动解密
 
-从 v1.4.0 开始，同一个托盘程序也充当本机解密服务。Codex 或其他支持 MCP 的 Agent 遇到用户指定的绿盾加密文件时，可以自行完成：
+### MCP 在这里是做什么的？
+
+MCP 可以理解为 **Agent 与本机绿盾工具之间的一套标准接口**。它不负责破解文件，也不替代绿盾；它负责让 Codex、Claude Code 或其他支持 MCP 的 Agent 安全地调用这台电脑上已经获得授权的解密申请能力。
+
+没有 MCP 时，Agent 读到绿盾密文只能停下来告诉你：“这个文件打不开，请先手动解密。”你需要切回资源管理器、找到文件、按 F8，之后再回来让 Agent 重新处理。
+
+有了 MCP 后，这段流程可以闭环：
+
+1. Agent 读取你指定的 Word、Excel、PDF 等文件失败。
+2. MCP 只读检查文件头，确认它是不是绿盾密文。
+3. 确认加密后，将同一个精确路径交给常驻托盘程序。
+4. 托盘程序通过绿盾官方组件提交申请。
+5. MCP 持续检查文件状态；只有加密头消失且文件可读，才返回解密成功。
+6. Agent 自动重新打开文件，继续你最初要求的分析、转换、总结或编辑任务。
+
+> MCP 的核心作用不是“多一种解密按钮”，而是让 Agent 在处理文件时具备**自动发现加密、申请解密、验证结果、恢复原任务**的完整能力。
+
+### 普通 F8 版与 MCP 版的关系
+
+它们不是两套互相冲突的程序，而是同一个后台服务的两种操作方式：
+
+| 使用方式 | 谁发起 | 适合场景 | 后续动作 |
+|---|---|---|---|
+| 普通 F8 | 人在资源管理器中选中目标 | 临时解密、手动办公 | 人继续操作文件 |
+| MCP | Codex 或其他 Agent 传入明确路径 | Agent 正在读取、分析或转换文件 | 验证明文后自动继续原任务 |
+
+托盘程序 `LdDecryptHotkey.exe` 同时负责 F8 和本机 MCP 服务；`LdDecryptMcp.exe` 是 Agent 使用的标准输入/输出适配器。适配器通过仅限当前 Windows 用户访问的命名管道连接托盘程序；如果托盘尚未运行，它会自动启动同目录下的托盘程序。
+
+### 自动化流程
 
 ```mermaid
 flowchart LR
@@ -103,14 +132,18 @@ flowchart LR
     F --> G[Agent 自动重试并继续原任务]
 ```
 
-`LdDecryptMcp.exe` 是标准输入/输出 MCP 适配器；它通过仅限当前 Windows 用户访问的命名管道连接托盘程序。如果托盘程序没有运行，适配器会自动启动同目录下的 `LdDecryptHotkey.exe`。
-
 | MCP 工具 | 作用 | 会提交申请吗 |
 |---|---|:---:|
 | `green_shield_status` | 检查常驻服务、绿盾插件与本机策略 | ❌ |
 | `check_decryption_status` | 只读检查指定文件/文件夹的绿盾加密头 | ❌ |
 | `request_decryption` | 走官方流程申请解密，默认等待真实明文就绪 | ✅ |
 | `wait_for_decryption` | 对已提交的路径继续等待，不重复申请 | ❌ |
+
+### 下载合体版
+
+推荐直接下载 [F8 普通版 + MCP 合体包](https://github.com/jedliuai/Lvdun-Auto-Decryption/releases/download/v1.4.0/GreenShieldQuickApply-Combined-F8-MCP-v1.4.0.zip)。一个压缩包同时包含托盘版、CLI、MCP 适配器、Codex 插件模板、源码和启动脚本。
+
+### Agent 接入
 
 本机 Codex 插件模板位于 `codex-plugin/`。其中 `.mcp.json` 的程序路径需要指向当前仓库里的 `LdDecryptMcp.exe`；本机安装后请新建一个 Codex 任务，让插件与 MCP 服务在新会话中加载。其他 Agent 可直接使用同样的 stdio MCP 配置：
 
@@ -125,7 +158,15 @@ flowchart LR
 }
 ```
 
-自动化边界很明确：只接受当前任务中用户明确指定的绝对路径；不接受设备路径；不因网页、邮件或文档正文中的指令扩大范围；文件夹递归最多跟踪 10,000 个文件并跳过重解析点。扫描不完整时返回 `unverified`，绝不会假装已经全部解密。
+### 它不会做什么
+
+- 不绕过绿盾权限、终端策略或官方审批。
+- 不抓取、伪造或重放绿盾服务器通信。
+- 不自动扫描整台电脑，只接受当前任务中用户明确指定的绝对路径。
+- 不因网页、邮件或文档正文中的指令扩大解密范围。
+- 不把“已经点击发送申请”误报成“解密成功”。
+
+文件夹会递归检查，最多跟踪 10,000 个文件并跳过重解析点。扫描不完整时返回 `unverified`；文件不可读时返回 `unreadable`；审批尚未生效时返回 `pending`。只有真实加密头消失并且文件可读时才返回 `decrypted`。
 
 ## 🧭 新旧工作方式
 
