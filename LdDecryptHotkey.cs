@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -18,10 +19,11 @@ internal static class LdDecryptHotkey
     private const int LdCommandDataSize = 512;
     private const uint MouseeventfLeftdown = 0x0002;
     private const uint MouseeventfLeftup = 0x0004;
-    private const int WmClose = 0x0010;
     private const string StartupShortcutName = "Lvdun Auto Decryption.lnk";
+    private const string LdMenuPlugPath = @"C:\Inetpub\ftproot\Tipray\LdTerm\LdMenuPlug.dll";
     private static readonly string LogPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LdDecryptHotkey.log");
     private static readonly object LdPlugSync = new object();
+    private static readonly object LogSync = new object();
     private static bool ldPlugInitialized;
 
     [DllImport("user32.dll")]
@@ -32,6 +34,9 @@ internal static class LdDecryptHotkey
 
     [DllImport("user32.dll")]
     private static extern bool SetCursorPos(int x, int y);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
@@ -58,19 +63,19 @@ internal static class LdDecryptHotkey
     private static extern bool GetWindowRect(IntPtr hWnd, out Rect rect);
 
     [DllImport("user32.dll")]
-    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
-    [DllImport(@"C:\Inetpub\ftproot\Tipray\LdTerm\LdMenuPlug.dll", EntryPoint = "DllSysPlugInit", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(LdMenuPlugPath, EntryPoint = "DllSysPlugInit", CallingConvention = CallingConvention.Cdecl)]
     private static extern void LdMenuPlugInit();
 
-    [DllImport(@"C:\Inetpub\ftproot\Tipray\LdTerm\LdMenuPlug.dll", EntryPoint = "DllSysPlugRelease", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(LdMenuPlugPath, EntryPoint = "DllSysPlugRelease", CallingConvention = CallingConvention.Cdecl)]
     private static extern void LdMenuPlugRelease();
 
-    [DllImport(@"C:\Inetpub\ftproot\Tipray\LdTerm\LdMenuPlug.dll", EntryPoint = "DllSysPlugGetMenuType", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(LdMenuPlugPath, EntryPoint = "DllSysPlugGetMenuType", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     private static extern bool LdMenuPlugGetMenuType(byte type);
 
-    [DllImport(@"C:\Inetpub\ftproot\Tipray\LdTerm\LdMenuPlug.dll", EntryPoint = "DllSysPlugSetCmdInfo", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(LdMenuPlugPath, EntryPoint = "DllSysPlugSetCmdInfo", CallingConvention = CallingConvention.Cdecl)]
     private static extern void LdMenuPlugSetCmdInfo(IntPtr command);
 
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
@@ -87,7 +92,6 @@ internal static class LdDecryptHotkey
     {
         public IntPtr Hwnd;
         public string Name;
-        public int SelectedCount;
         public List<string> Paths;
     }
 
@@ -122,6 +126,7 @@ internal static class LdDecryptHotkey
     {
         private readonly NotifyIcon tray;
         private volatile bool busy;
+        private bool hotkeyRegistered;
 
         public HotkeyWindow()
         {
@@ -144,9 +149,20 @@ internal static class LdDecryptHotkey
 
             Load += delegate
             {
-                RegisterHotKey(Handle, HotkeyId, 0, VkF8);
+                hotkeyRegistered = RegisterHotKey(Handle, HotkeyId, 0, VkF8);
+                if (!hotkeyRegistered)
+                {
+                    Log("F8 registration failed");
+                    MessageBox.Show(
+                        "F8 \u5feb\u6377\u952e\u6ce8\u518c\u5931\u8d25\uff0c\u53ef\u80fd\u5df2\u6709\u53e6\u4e00\u4e2a\u7a0b\u5e8f\u5360\u7528 F8\uff0c\u6216\u672c\u5de5\u5177\u5df2\u7ecf\u5728\u8fd0\u884c\u3002",
+                        "\u7eff\u76fe\u5feb\u901f\u7533\u8bf7 F8",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    Close();
+                    return;
+                }
                 Log("started");
-                tray.ShowBalloonTip(1200, "\u7eff\u76fe\u5feb\u901f\u7533\u8bf7 F8", "\u5df2\u542f\u52a8\u3002\u9009\u4e2d\u6587\u4ef6\u540e\u6309 F8\uff0c\u76f4\u63a5\u8c03\u7528\u7eff\u76fe\u672c\u5730\u7533\u8bf7\u3002", ToolTipIcon.Info);
+                tray.ShowBalloonTip(1200, "\u7eff\u76fe\u5feb\u901f\u7533\u8bf7 F8", "\u5df2\u542f\u52a8\u3002\u9009\u4e2d\u6587\u4ef6\u6216\u6587\u4ef6\u5939\u540e\u6309 F8\uff0c\u76f4\u63a5\u8c03\u7528\u7eff\u76fe\u672c\u5730\u7533\u8bf7\u3002", ToolTipIcon.Info);
                 ThreadPool.QueueUserWorkItem(delegate
                 {
                     try { EnsureLdMenuPlugInitialized(); Log("direct plug ready"); }
@@ -155,7 +171,8 @@ internal static class LdDecryptHotkey
             };
             FormClosed += delegate
             {
-                UnregisterHotKey(Handle, HotkeyId);
+                if (hotkeyRegistered)
+                    UnregisterHotKey(Handle, HotkeyId);
                 tray.Visible = false;
                 tray.Dispose();
                 Log("stopped");
@@ -179,7 +196,7 @@ internal static class LdDecryptHotkey
                         catch (Exception ex)
                         {
                             Log("error: " + ex);
-                            tray.ShowBalloonTip(3000, "\u7eff\u76fe\u5feb\u901f\u7533\u8bf7 F8", ex.Message, ToolTipIcon.Warning);
+                            ShowWarning(ex.Message);
                         }
                         finally
                         {
@@ -191,6 +208,19 @@ internal static class LdDecryptHotkey
             }
             base.WndProc(ref m);
         }
+
+        private void ShowWarning(string message)
+        {
+            if (IsDisposed || Disposing)
+                return;
+            if (InvokeRequired)
+            {
+                try { BeginInvoke(new Action<string>(ShowWarning), message); }
+                catch (InvalidOperationException) { }
+                return;
+            }
+            tray.ShowBalloonTip(3000, "\u7eff\u76fe\u5feb\u901f\u7533\u8bf7 F8", message, ToolTipIcon.Warning);
+        }
     }
 
     private static void RunDirectApprovalFlow(IntPtr sourceWindow, bool allowExplorerFallback, bool submit)
@@ -201,23 +231,18 @@ internal static class LdDecryptHotkey
         if (target == null && allowExplorerFallback)
             target = FindMostRecentSelectedExplorerTarget();
         if (target == null || target.Paths == null || target.Paths.Count == 0)
-            throw new InvalidOperationException("\u6ca1\u6709\u627e\u5230\u5f53\u524d\u8d44\u6e90\u7ba1\u7406\u5668\u6216\u684c\u9762\u4e2d\u660e\u786e\u9009\u4e2d\u7684\u6587\u4ef6\u3002\u8bf7\u5148\u9009\u4e2d\u76ee\u6807\uff0c\u518d\u6309 F8\u3002");
+            throw new InvalidOperationException("\u6ca1\u6709\u627e\u5230\u5f53\u524d\u8d44\u6e90\u7ba1\u7406\u5668\u6216\u684c\u9762\u4e2d\u660e\u786e\u9009\u4e2d\u7684\u6587\u4ef6\u6216\u6587\u4ef6\u5939\u3002\u8bf7\u5148\u9009\u4e2d\u76ee\u6807\uff0c\u518d\u6309 F8\u3002");
 
-        Log("target: " + target.Name + " | count=" + target.SelectedCount + " | hwnd=" + target.Hwnd);
+        var paths = ValidateTargets(target.Paths);
+        Log("target: " + target.Name + " | count=" + paths.Count + " | hwnd=" + target.Hwnd);
 
-        foreach (var path in target.Paths)
-        {
-            if (Directory.Exists(path))
-                throw new InvalidOperationException("\u76f4\u8fde\u6a21\u5f0f\u5f53\u524d\u53ea\u652f\u6301\u6587\u4ef6\uff0c\u8bf7\u8fdb\u5165\u6587\u4ef6\u5939\u540e\u9009\u4e2d\u6587\u4ef6\u3002");
-            if (!File.Exists(path))
-                throw new FileNotFoundException("\u9009\u4e2d\u7684\u6587\u4ef6\u4e0d\u5b58\u5728\u3002", path);
-        }
+        if (FindApprovalWindows().Count > 0)
+            throw new InvalidOperationException("\u5df2\u6709\u7eff\u76fe\u89e3\u5bc6\u7533\u8bf7\u7a97\u53e3\u672a\u5904\u7406\u3002\u8bf7\u5148\u53d1\u9001\u6216\u5173\u95ed\u5b83\uff0c\u518d\u6309 F8\uff0c\u4ee5\u514d\u628a\u6587\u4ef6\u52a0\u5165\u9519\u8bef\u7684\u7533\u8bf7\u3002");
 
-        CloseExistingApplyWindows();
-        SendOfficialDecryptSignal(target.Paths);
-        Log("direct signal sent: " + target.Paths.Count + " file(s)");
+        SendOfficialDecryptSignal(paths);
+        Log("direct signal sent: " + paths.Count + " item(s)");
 
-        var applyWindow = WaitForWindowTitleContains(new[] { "\u65b0\u5efa\u7533\u8bf7", "\u6587\u4ef6\u89e3\u5bc6\u7533\u8bf7" }, 10000);
+        var applyWindow = WaitForApprovalWindow(10000);
         if (applyWindow == IntPtr.Zero)
             throw new InvalidOperationException("\u7eff\u76fe\u5df2\u63a5\u6536\u672c\u5730\u547d\u4ee4\uff0c\u4f46\u6ca1\u6709\u6253\u5f00\u7533\u8bf7\u7a97\u53e3\u3002");
 
@@ -227,18 +252,49 @@ internal static class LdDecryptHotkey
         var sendButton = WaitForButtonInWindow(applyWindow,
             new[] { "\u53d1\u9001\u7533\u8bf7", "\u63d0\u4ea4\u7533\u8bf7", "\u53d1\u9001", "\u63d0\u4ea4" },
             DirectApplyReadyDelayMs);
-        if (sendButton != null)
-            ClickOrInvoke(sendButton);
-        else
-            ClickSendApplyButton(applyWindow);
+        var sent = sendButton != null
+            ? ClickOrInvoke(sendButton)
+            : ClickSendApplyButton(applyWindow);
+        if (!sent)
+            throw new InvalidOperationException("\u7533\u8bf7\u7a97\u53e3\u5df2\u6253\u5f00\uff0c\u4f46\u65e0\u6cd5\u5b89\u5168\u89e6\u53d1\u201c\u53d1\u9001\u7533\u8bf7\u201d\u3002\u8bf7\u624b\u52a8\u68c0\u67e5\u540e\u53d1\u9001\u3002");
         Log("direct send apply clicked");
+    }
+
+    private static List<string> ValidateTargets(List<string> paths)
+    {
+        var validated = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in paths)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                continue;
+
+            var fullPath = Path.GetFullPath(path);
+            if (!File.Exists(fullPath) && !Directory.Exists(fullPath))
+                throw new FileNotFoundException("\u9009\u4e2d\u7684\u6587\u4ef6\u6216\u6587\u4ef6\u5939\u4e0d\u5b58\u5728\u3002", fullPath);
+            if (!seen.Add(fullPath))
+                continue;
+
+            ValidateCommandPath(fullPath);
+            validated.Add(fullPath);
+        }
+
+        if (validated.Count == 0)
+            throw new InvalidOperationException("\u9009\u4e2d\u9879\u91cc\u6ca1\u6709\u53ef\u7528\u7684\u6587\u4ef6\u6216\u6587\u4ef6\u5939\u3002");
+        return validated;
+    }
+
+    private static void ValidateCommandPath(string path)
+    {
+        if (Encoding.Default.GetByteCount(path + "\0") > LdCommandDataSize ||
+            Encoding.Unicode.GetByteCount(path + "\0") > LdCommandDataSize)
+            throw new PathTooLongException("\u8def\u5f84\u8d85\u8fc7\u7eff\u76fe\u672c\u5730\u547d\u4ee4\u7684 512 \u5b57\u8282\u4e0a\u9650\uff1a" + path);
     }
 
     private static void SendOfficialDecryptSignal(List<string> paths)
     {
-        const string plugPath = @"C:\Inetpub\ftproot\Tipray\LdTerm\LdMenuPlug.dll";
-        if (!File.Exists(plugPath))
-            throw new FileNotFoundException("\u6ca1\u6709\u627e\u5230\u7eff\u76fe\u672c\u5730\u83dc\u5355\u7ec4\u4ef6\u3002", plugPath);
+        if (!File.Exists(LdMenuPlugPath))
+            throw new FileNotFoundException("\u6ca1\u6709\u627e\u5230\u7eff\u76fe\u672c\u5730\u83dc\u5355\u7ec4\u4ef6\u3002", LdMenuPlugPath);
 
         lock (LdPlugSync)
         {
@@ -250,7 +306,7 @@ internal static class LdDecryptHotkey
             {
                 var isLast = index == paths.Count - 1;
                 SendLdCommand(1, Encoding.Default.GetBytes(paths[index] + "\0"), isLast);
-                SendLdCommand(0x12, Encoding.Unicode.GetBytes(paths[index]), isLast);
+                SendLdCommand(0x12, Encoding.Unicode.GetBytes(paths[index] + "\0"), isLast);
             }
         }
     }
@@ -308,22 +364,23 @@ internal static class LdDecryptHotkey
             {
                 case "--once":
                 case "once":
-                    Console.WriteLine("Sending the official local decrypt-application command for selected files.");
-                    RunDirectApprovalFlow(GetForegroundWindow(), true, true);
+                    Console.WriteLine("Sending the official local decrypt-application command for selected items.");
+                    var onceWindow = args.Length > 1 ? ParseWindowHandle(args[1]) : GetForegroundWindow();
+                    RunDirectApprovalFlow(onceWindow, false, true);
                     return 0;
 
                 case "--prepare-once":
                     Console.WriteLine("Opening the official application window without submitting it.");
-                    var prepareWindow = args.Length > 1 ? new IntPtr(long.Parse(args[1])) : GetForegroundWindow();
+                    var prepareWindow = args.Length > 1 ? ParseWindowHandle(args[1]) : GetForegroundWindow();
                     RunDirectApprovalFlow(prepareWindow, args.Length == 1, false);
                     return 0;
 
                 case "--list-selected":
-                    var requestedWindow = args.Length > 1 ? new IntPtr(long.Parse(args[1])) : GetForegroundWindow();
+                    var requestedWindow = args.Length > 1 ? ParseWindowHandle(args[1]) : GetForegroundWindow();
                     var selectedTarget = FindSelectedExplorerTarget(requestedWindow);
                     if (selectedTarget == null && args.Length == 1) selectedTarget = FindMostRecentSelectedExplorerTarget();
                     if (selectedTarget == null || selectedTarget.Paths == null || selectedTarget.Paths.Count == 0)
-                        throw new InvalidOperationException("No selected Explorer files were found.");
+                        throw new InvalidOperationException("No selected Explorer files or folders were found.");
                     foreach (var path in selectedTarget.Paths) Console.WriteLine(path);
                     return 0;
 
@@ -377,7 +434,7 @@ internal static class LdDecryptHotkey
         Console.WriteLine("Lvdun Auto Decryption CLI");
         Console.WriteLine();
         Console.WriteLine("Usage:");
-        Console.WriteLine("  LdDecryptHotkeyCli.exe --once              Run the direct local application flow");
+        Console.WriteLine("  LdDecryptHotkeyCli.exe --once [HWND]       Run the direct local application flow");
         Console.WriteLine("  LdDecryptHotkeyCli.exe --prepare-once [HWND]  Open the application window without submitting");
         Console.WriteLine("  LdDecryptHotkeyCli.exe --list-selected [HWND]  Inspect selected paths without copying");
         Console.WriteLine("  LdDecryptHotkeyCli.exe --probe-direct      Check the local Green Shield interface");
@@ -386,7 +443,15 @@ internal static class LdDecryptHotkey
         Console.WriteLine("  LdDecryptHotkeyCli.exe --status            Show startup status and log path");
         Console.WriteLine("  LdDecryptHotkeyCli.exe --help              Show help");
         Console.WriteLine();
-        Console.WriteLine("For normal daily use, run LdDecryptHotkey.exe and press F8 in Explorer.");
+        Console.WriteLine("For normal daily use, select files or folders in Explorer and press F8.");
+    }
+
+    private static IntPtr ParseWindowHandle(string value)
+    {
+        long handle;
+        if (!long.TryParse(value, out handle) || handle <= 0)
+            throw new ArgumentException("HWND must be a positive decimal integer.");
+        return new IntPtr(handle);
     }
 
     private static ExplorerTarget FindSelectedExplorerTarget(IntPtr hwnd)
@@ -397,6 +462,18 @@ internal static class LdDecryptHotkey
         try
         {
             var shellPaths = GetExplorerSelectedPaths(hwnd);
+            if (shellPaths.Count > 0)
+            {
+                var pathNames = new List<string>();
+                foreach (var path in shellPaths) pathNames.Add(Path.GetFileName(path));
+                return new ExplorerTarget
+                {
+                    Hwnd = hwnd,
+                    Name = BuildSelectionSummary(pathNames),
+                    Paths = shellPaths
+                };
+            }
+
             var root = AutomationElement.FromHandle(hwnd);
             var items = root.FindAll(
                 TreeScope.Descendants,
@@ -421,24 +498,8 @@ internal static class LdDecryptHotkey
                 return new ExplorerTarget
                 {
                     Hwnd = hwnd,
-                    SelectedCount = selectedCount,
                     Name = BuildSelectionSummary(selectedNames),
-                    Paths = shellPaths.Count > 0 ? shellPaths : GetSelectedPaths(hwnd, selectedNames)
-                };
-            }
-
-            // Explorer's automation tree can report selected items as off-screen even
-            // though the Shell selection is valid. Direct mode only needs exact paths.
-            if (shellPaths.Count > 0)
-            {
-                var pathNames = new List<string>();
-                foreach (var path in shellPaths) pathNames.Add(Path.GetFileName(path));
-                return new ExplorerTarget
-                {
-                    Hwnd = hwnd,
-                    SelectedCount = shellPaths.Count,
-                    Name = BuildSelectionSummary(pathNames),
-                    Paths = shellPaths
+                    Paths = GetDesktopSelectedPaths(hwnd, selectedNames)
                 };
             }
         }
@@ -449,24 +510,56 @@ internal static class LdDecryptHotkey
         return null;
     }
 
-    private static List<string> GetSelectedPaths(IntPtr hwnd, List<string> selectedNames)
+    private static List<string> GetDesktopSelectedPaths(IntPtr hwnd, List<string> selectedNames)
     {
-        var paths = GetExplorerSelectedPaths(hwnd);
-        if (paths.Count > 0)
-            return paths;
+        var paths = new List<string>();
 
         var className = GetWindowClass(hwnd);
         if (className != "Progman" && className != "WorkerW")
             return paths;
 
-        var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        var desktopRoots = new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory)
+        };
         foreach (var name in selectedNames)
         {
-            var path = Path.Combine(desktop, name);
-            if (File.Exists(path) || Directory.Exists(path))
-                paths.Add(path);
+            var candidates = new List<string>();
+            foreach (var desktopRoot in desktopRoots)
+            {
+                if (string.IsNullOrWhiteSpace(desktopRoot) || !Directory.Exists(desktopRoot))
+                    continue;
+
+                var exactPath = Path.Combine(desktopRoot, name);
+                if (File.Exists(exactPath) || Directory.Exists(exactPath))
+                {
+                    AddUniquePath(candidates, exactPath);
+                    continue;
+                }
+
+                foreach (var entry in Directory.GetFileSystemEntries(desktopRoot))
+                {
+                    if (string.Equals(Path.GetFileNameWithoutExtension(entry), name, StringComparison.OrdinalIgnoreCase))
+                        AddUniquePath(candidates, entry);
+                }
+            }
+
+            if (candidates.Count != 1)
+                throw new InvalidOperationException("\u65e0\u6cd5\u552f\u4e00\u786e\u5b9a\u684c\u9762\u9009\u4e2d\u9879\u7684\u5b8c\u6574\u8def\u5f84\uff1a" + name);
+            paths.Add(candidates[0]);
         }
         return paths;
+    }
+
+    private static void AddUniquePath(List<string> paths, string path)
+    {
+        foreach (var existing in paths)
+        {
+            if (string.Equals(existing, path, StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+        paths.Add(path);
     }
 
     private static List<string> GetExplorerSelectedPaths(IntPtr hwnd)
@@ -596,7 +689,7 @@ internal static class LdDecryptHotkey
                 var name = Normalize(SafeName(buttons[i]));
                 foreach (var needle in needles)
                 {
-                    if (name.IndexOf(Normalize(needle), StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (string.Equals(name, Normalize(needle), StringComparison.OrdinalIgnoreCase))
                         return buttons[i];
                 }
             }
@@ -610,8 +703,8 @@ internal static class LdDecryptHotkey
 
     private static AutomationElement WaitForButtonInWindow(IntPtr hwnd, string[] needles, int timeoutMs)
     {
-        var deadline = Environment.TickCount + timeoutMs;
-        while (Environment.TickCount < deadline)
+        var stopwatch = Stopwatch.StartNew();
+        while (stopwatch.ElapsedMilliseconds < timeoutMs)
         {
             var button = FindButtonInWindow(hwnd, needles);
             if (button != null) return button;
@@ -634,55 +727,29 @@ internal static class LdDecryptHotkey
         return buffer.ToString();
     }
 
-    private static IntPtr WaitForWindowTitleContains(string[] needles, int timeoutMs)
+    private static IntPtr WaitForApprovalWindow(int timeoutMs)
     {
-        var deadline = Environment.TickCount + timeoutMs;
-        while (Environment.TickCount < deadline)
+        var stopwatch = Stopwatch.StartNew();
+        while (stopwatch.ElapsedMilliseconds < timeoutMs)
         {
-            var found = FindWindowTitleContains(needles);
-            if (found != IntPtr.Zero) return found;
+            var windows = FindApprovalWindows();
+            if (windows.Count > 0) return windows[0];
             Thread.Sleep(120);
         }
         return IntPtr.Zero;
     }
 
-    private static void CloseExistingApplyWindows()
+    private static List<IntPtr> FindApprovalWindows()
     {
-        var windows = FindWindowsTitleContains(new[] { "\u65b0\u5efa\u7533\u8bf7", "\u6587\u4ef6\u89e3\u5bc6\u7533\u8bf7" });
-        if (windows.Count == 0)
-            return;
-
-        foreach (var hwnd in windows)
-        {
-            Log("closing stale apply window: " + GetTitle(hwnd));
-            SendMessage(hwnd, WmClose, IntPtr.Zero, IntPtr.Zero);
-        }
-
-        var deadline = Environment.TickCount + 2500;
-        while (Environment.TickCount < deadline)
-        {
-            if (FindWindowsTitleContains(new[] { "\u65b0\u5efa\u7533\u8bf7", "\u6587\u4ef6\u89e3\u5bc6\u7533\u8bf7" }).Count == 0)
-                return;
-            Thread.Sleep(100);
-        }
-    }
-
-    private static IntPtr FindWindowTitleContains(string[] needles)
-    {
-        var windows = FindWindowsTitleContains(needles);
-        return windows.Count > 0 ? windows[0] : IntPtr.Zero;
-    }
-
-    private static System.Collections.Generic.List<IntPtr> FindWindowsTitleContains(string[] needles)
-    {
-        var results = new System.Collections.Generic.List<IntPtr>();
+        var results = new List<IntPtr>();
+        var titles = new[] { "\u65b0\u5efa\u7533\u8bf7", "\u6587\u4ef6\u89e3\u5bc6\u7533\u8bf7" };
         EnumWindows(delegate (IntPtr hwnd, IntPtr lParam)
         {
-            if (!IsWindowVisible(hwnd))
+            if (!IsWindowVisible(hwnd) || !IsApprovalProcess(hwnd))
                 return true;
 
             var title = Normalize(GetTitle(hwnd));
-            foreach (var needle in needles)
+            foreach (var needle in titles)
             {
                 if (title.IndexOf(Normalize(needle), StringComparison.OrdinalIgnoreCase) >= 0)
                 {
@@ -693,6 +760,23 @@ internal static class LdDecryptHotkey
             return true;
         }, IntPtr.Zero);
         return results;
+    }
+
+    private static bool IsApprovalProcess(IntPtr hwnd)
+    {
+        uint processId;
+        if (GetWindowThreadProcessId(hwnd, out processId) == 0 || processId == 0)
+            return false;
+
+        try
+        {
+            using (var process = Process.GetProcessById((int)processId))
+                return process.ProcessName.StartsWith("LdApproval", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static string Normalize(string value)
@@ -707,46 +791,62 @@ internal static class LdDecryptHotkey
         catch { return ""; }
     }
 
-    private static void ClickSendApplyButton(IntPtr hwnd)
+    private static bool ClickSendApplyButton(IntPtr hwnd)
     {
+        if (!IsWindowVisible(hwnd) || !IsApprovalProcess(hwnd))
+            return false;
+
         Rect rect;
         if (!GetWindowRect(hwnd, out rect))
-            return;
+            return false;
 
         var width = rect.Right - rect.Left;
         var height = rect.Bottom - rect.Top;
         if (width <= 0 || height <= 0)
-            return;
+            return false;
 
         // The Green Shield application uses a fixed bottom-right button layout.
         var x = rect.Right - 70;
         var y = rect.Bottom - 46;
-        SetCursorPos(x, y);
+        SetForegroundWindow(hwnd);
         Thread.Sleep(150);
+        if (!SetCursorPos(x, y))
+            return false;
         mouse_event(MouseeventfLeftdown, 0, 0, 0, UIntPtr.Zero);
         mouse_event(MouseeventfLeftup, 0, 0, 0, UIntPtr.Zero);
         Thread.Sleep(350);
+        return true;
     }
 
-    private static void ClickOrInvoke(AutomationElement element)
+    private static bool ClickOrInvoke(AutomationElement element)
     {
         object pattern;
         if (element.TryGetCurrentPattern(InvokePattern.Pattern, out pattern))
         {
-            ((InvokePattern)pattern).Invoke();
-            Thread.Sleep(350);
-            return;
+            try
+            {
+                ((InvokePattern)pattern).Invoke();
+                Thread.Sleep(350);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log("send button invoke error: " + ex.Message);
+            }
         }
 
         var rect = element.Current.BoundingRectangle;
         if (!rect.IsEmpty)
         {
-            SetCursorPos((int)(rect.Left + rect.Width / 2), (int)(rect.Top + rect.Height / 2));
+            if (!SetCursorPos((int)(rect.Left + rect.Width / 2), (int)(rect.Top + rect.Height / 2)))
+                return false;
             Thread.Sleep(80);
             mouse_event(MouseeventfLeftdown, 0, 0, 0, UIntPtr.Zero);
             mouse_event(MouseeventfLeftup, 0, 0, 0, UIntPtr.Zero);
             Thread.Sleep(350);
+            return true;
         }
+        return false;
     }
 
     private static void InstallStartup(bool showMessage)
@@ -754,18 +854,12 @@ internal static class LdDecryptHotkey
         try
         {
             var shortcutPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), StartupShortcutName);
-            var script = string.Format(
-                "$ws=New-Object -ComObject WScript.Shell; $s=$ws.CreateShortcut('{0}'); $s.TargetPath='{1}'; $s.WorkingDirectory='{2}'; $s.Save()",
-                shortcutPath.Replace("'", "''"),
-                Application.ExecutablePath.Replace("'", "''"),
-                AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\').Replace("'", "''"));
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "powershell.exe",
-                Arguments = "-NoProfile -ExecutionPolicy Bypass -Command \"" + script + "\"",
-                CreateNoWindow = true,
-                UseShellExecute = false
-            }).WaitForExit();
+            var trayExecutablePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LdDecryptHotkey.exe");
+            if (!File.Exists(trayExecutablePath))
+                throw new FileNotFoundException("\u6ca1\u6709\u627e\u5230\u6258\u76d8\u7248\u4e3b\u7a0b\u5e8f\u3002", trayExecutablePath);
+            CreateStartupShortcut(shortcutPath, trayExecutablePath);
+            if (!File.Exists(shortcutPath))
+                throw new IOException("\u5f00\u673a\u81ea\u542f\u5feb\u6377\u65b9\u5f0f\u672a\u80fd\u521b\u5efa\u3002");
             Log("startup installed");
             if (showMessage)
                 MessageBox.Show("\u5df2\u8bbe\u7f6e\u5f00\u673a\u81ea\u542f\u3002", "\u7eff\u76fe\u89e3\u5bc6 F8", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -777,6 +871,49 @@ internal static class LdDecryptHotkey
                 MessageBox.Show("\u8bbe\u7f6e\u5f00\u673a\u81ea\u542f\u5931\u8d25\uff1a" + ex.Message, "\u7eff\u76fe\u89e3\u5bc6 F8", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             else
                 throw;
+        }
+    }
+
+    private static void CreateStartupShortcut(string shortcutPath, string targetPath)
+    {
+        object shell = null;
+        object shortcut = null;
+        try
+        {
+            var shellType = Type.GetTypeFromProgID("WScript.Shell");
+            if (shellType == null)
+                throw new InvalidOperationException("WScript.Shell is unavailable.");
+
+            shell = Activator.CreateInstance(shellType);
+            shortcut = shell.GetType().InvokeMember(
+                "CreateShortcut",
+                System.Reflection.BindingFlags.InvokeMethod,
+                null,
+                shell,
+                new object[] { shortcutPath });
+            shortcut.GetType().InvokeMember(
+                "TargetPath",
+                System.Reflection.BindingFlags.SetProperty,
+                null,
+                shortcut,
+                new object[] { targetPath });
+            shortcut.GetType().InvokeMember(
+                "WorkingDirectory",
+                System.Reflection.BindingFlags.SetProperty,
+                null,
+                shortcut,
+                new object[] { AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\') });
+            shortcut.GetType().InvokeMember(
+                "Save",
+                System.Reflection.BindingFlags.InvokeMethod,
+                null,
+                shortcut,
+                null);
+        }
+        finally
+        {
+            ReleaseComObject(shortcut);
+            ReleaseComObject(shell);
         }
     }
 
@@ -811,7 +948,8 @@ internal static class LdDecryptHotkey
     {
         try
         {
-            File.AppendAllText(LogPath, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff ") + message + Environment.NewLine);
+            lock (LogSync)
+                File.AppendAllText(LogPath, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff ") + message + Environment.NewLine);
         }
         catch { }
     }

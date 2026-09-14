@@ -2,7 +2,7 @@
 
 # 🛡️ 绿盾 F8 极速申请解密
 
-### 选中文件，按下 F8。让繁琐的申请流程在一瞬间抵达终点。
+### 选中文件或文件夹，按下 F8。让繁琐的申请流程在一瞬间抵达终点。
 
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/jedliuai/Lvdun-Auto-Decryption)
 [![.NET Framework](https://img.shields.io/badge/.NET_Framework-4.x-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)](https://github.com/jedliuai/Lvdun-Auto-Decryption)
@@ -27,11 +27,11 @@
 
 现在只剩：
 
-> **选中文件 → F8**
+> **选中文件 / 文件夹 → F8**
 
 ## 🚀 为什么这么快
 
-旧版像一个很熟练的人：移动鼠标、打开菜单、识别菜单项、展开子菜单，再等待窗口出现。新版则找到了这串点击最终调用的**本地入口**，跳过右键菜单这一层，直接把选中的文件路径交给绿盾官方组件。
+旧版像一个很熟练的人：移动鼠标、打开菜单、识别菜单项、展开子菜单，再等待窗口出现。新版则找到了这串点击最终调用的**本地入口**，跳过右键菜单这一层，直接把选中项的路径交给绿盾官方组件。
 
 | 环节 | 旧版：界面模拟 | 新版：本地直连 |
 |---|---:|---:|
@@ -45,8 +45,8 @@
 
 ```mermaid
 flowchart LR
-    A[资源管理器选中文件] --> B[按 F8]
-    B --> C[读取精确文件路径]
+    A[资源管理器选中文件或文件夹] --> B[按 F8]
+    B --> C[读取精确路径]
     C --> D[LdMenuPlug.dll 本地命令]
     D --> E[绿盾官方 LdApproval]
     E --> F[发送解密申请]
@@ -73,11 +73,11 @@ start-ld-decrypt-hotkey.bat
 
 ### 2. 使用
 
-1. 在 Windows 资源管理器或桌面选中一个或多个文件。
+1. 在 Windows 资源管理器或桌面选中一个或多个文件、文件夹，也可以混合多选。
 2. 按 `F8`。
 3. 工具调用绿盾官方申请窗口并发送申请。
 
-> 当前直连版本只接受文件，不接受文件夹。若要批量处理，请进入文件夹后多选文件。
+> 文件、文件夹和文件/文件夹混合多选都会作为一个批次交给绿盾官方申请程序。
 
 ### 3. 设置开机自启（可选）
 
@@ -118,7 +118,7 @@ flowchart TB
 普通使用只需托盘版。CLI 适合诊断、自动化和人工核对：
 
 ```text
-LdDecryptHotkeyCli.exe --once
+LdDecryptHotkeyCli.exe --once [HWND]
 LdDecryptHotkeyCli.exe --prepare-once [HWND]
 LdDecryptHotkeyCli.exe --list-selected [HWND]
 LdDecryptHotkeyCli.exe --probe-direct
@@ -130,7 +130,7 @@ LdDecryptHotkeyCli.exe --help
 
 | 命令 | 作用 | 会发送申请吗 |
 |---|---|:---:|
-| `--once` | 对当前选中文件执行完整流程 | ✅ |
+| `--once` | 对指定资源管理器窗口中的选中项执行完整流程 | ✅ |
 | `--prepare-once` | 只打开官方申请窗口，供人工核对 | ❌ |
 | `--list-selected` | 打印程序识别到的文件路径 | ❌ |
 | `--probe-direct` | 检查本地插件及策略是否支持直连 | ❌ |
@@ -144,8 +144,10 @@ LdDecryptHotkeyCli.exe --help
 2. 桌面场景使用 UI Automation 作为路径识别补充。
 3. 检查本机策略是否启用了“申请解密”菜单类型。
 4. 按插件要求分别传入系统编码路径和 Unicode 路径。
-5. 多选时在最后一个文件上标记批次结束。
+5. 多选时在最后一个选中项上标记批次结束。
 6. 等待官方申请窗口，并优先通过 UI Automation 调用发送按钮。
+
+发送前会先验证整个批次：不存在或超长的路径会让本次操作整体停止，重复路径会自动去重。若已有尚未处理的官方申请窗口，工具也会停止并提示，而不会再自动关闭窗口或把新目标混入旧申请。
 
 程序不会读取或改写文件正文，因此也避开了“透明读取后另存为明文、随即又被终端重新加密”的循环。
 
@@ -212,7 +214,7 @@ GreenShieldQuickApply/
 </details>
 
 <details>
-<summary><strong>提示没有选中文件</strong></summary>
+<summary><strong>提示没有选中文件或文件夹</strong></summary>
 
 先单击资源管理器或桌面里的目标文件，再按 F8。使用 `--list-selected` 可以查看程序实际识别到的路径。
 
