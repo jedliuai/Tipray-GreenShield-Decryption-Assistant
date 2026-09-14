@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🛡️ 绿盾 F8 极速申请解密
+# 🛡️ 绿盾 F8 / MCP 极速申请解密
 
 ### 人选中文件按 F8，Agent 遇到密文自动接管。让繁琐的申请流程在一瞬间抵达终点。
 
@@ -10,7 +10,7 @@
 [![MCP](https://img.shields.io/badge/Agent-MCP-7C3AED?style=for-the-badge)](#-agent--mcp-自动解密)
 [![Authorized Use](https://img.shields.io/badge/用途-授权环境-EF6C00?style=for-the-badge)](#合规与安全边界)
 
-**绿盾 · 绿盾解密 · 天锐绿盾 · 天锐绿盾解密 · 文件解密 · 申请解密 · DLP · 文档加密 · 透明加密 · Windows 自动化**
+**绿盾 · 绿盾解密 · 天锐绿盾 · 天锐绿盾解密 · MCP Server · AI Agent · 文件解密 · DLP · 文档加密 · 透明加密 · Windows 自动化**
 
 [快速开始](#-快速开始) · [Agent / MCP](#-agent--mcp-自动解密) · [为什么这么快](#-为什么这么快) · [命令行](#-命令行工具) · [故障排查](#-故障排查)
 
@@ -20,7 +20,18 @@
 
 ## ✨ 它是什么
 
-这是一个面向已安装**天锐绿盾 / 绿盾终端**的 Windows 效率工具。它同时提供两种入口：人可以在资源管理器里选中文件后按 `F8`；Codex 等 Agent 可以通过 MCP 检测用户指定的文件、申请解密、等待明文就绪，然后继续原来的文档任务。两种入口共用同一个托盘常驻程序和绿盾官方申请链。
+这是一个面向已安装**天锐绿盾 / 绿盾终端（Tipray / LdTerm）**的 Windows 授权解密申请工具。它把同一条绿盾官方流程开放成两种入口：人可以在资源管理器中按 `F8`，Codex 等 AI Agent 可以通过本机 MCP Server 自动检测用户指定的密文、申请解密、验证结果并继续原任务。
+
+> **English summary:** A Windows F8 helper and local MCP server for authorized Tipray Green Shield decryption requests, with file/folder support and automatic AI-agent task resumption.
+
+### 两种入口，共用一条官方链路
+
+| 入口 | 谁来使用 | 最适合的场景 | 解密之后 |
+|---|---|---|---|
+| `F8` 快捷键 | 人 | 在资源管理器或桌面临时选择文件、文件夹 | 回到原软件继续办公 |
+| MCP 工具 | Codex、Claude Code 等 Agent | Agent 正在读取、分析、转换或编辑指定文件 | 验证明文后自动恢复原任务 |
+
+> 📦 推荐下载：[F8 普通版 + MCP 合体包](https://github.com/jedliuai/Lvdun-Auto-Decryption/releases/download/v1.4.0/GreenShieldQuickApply-Combined-F8-MCP-v1.4.0.zip)
 
 它解决的是一个很朴素、却每天都在吞噬时间的问题：
 
@@ -109,16 +120,7 @@ MCP 可以理解为 **Agent 与本机绿盾工具之间的一套标准接口**�
 
 > MCP 的核心作用不是“多一种解密按钮”，而是让 Agent 在处理文件时具备**自动发现加密、申请解密、验证结果、恢复原任务**的完整能力。
 
-### 普通 F8 版与 MCP 版的关系
-
-它们不是两套互相冲突的程序，而是同一个后台服务的两种操作方式：
-
-| 使用方式 | 谁发起 | 适合场景 | 后续动作 |
-|---|---|---|---|
-| 普通 F8 | 人在资源管理器中选中目标 | 临时解密、手动办公 | 人继续操作文件 |
-| MCP | Codex 或其他 Agent 传入明确路径 | Agent 正在读取、分析或转换文件 | 验证明文后自动继续原任务 |
-
-托盘程序 `LdDecryptHotkey.exe` 同时负责 F8 和本机 MCP 服务；`LdDecryptMcp.exe` 是 Agent 使用的标准输入/输出适配器。适配器通过仅限当前 Windows 用户访问的命名管道连接托盘程序；如果托盘尚未运行，它会自动启动同目录下的托盘程序。
+托盘程序 `LdDecryptHotkey.exe` 同时承载快捷键和本机解密服务；`LdDecryptMcp.exe` 只负责把 Agent 的标准 MCP 调用转发给它。两者通过仅限当前 Windows 用户访问的命名管道通信；如果托盘尚未运行，MCP 适配器会自动启动同目录下的托盘程序。
 
 ### 自动化流程
 
@@ -138,10 +140,6 @@ flowchart LR
 | `check_decryption_status` | 只读检查指定文件/文件夹的绿盾加密头 | ❌ |
 | `request_decryption` | 走官方流程申请解密，默认等待真实明文就绪 | ✅ |
 | `wait_for_decryption` | 对已提交的路径继续等待，不重复申请 | ❌ |
-
-### 下载合体版
-
-推荐直接下载 [F8 普通版 + MCP 合体包](https://github.com/jedliuai/Lvdun-Auto-Decryption/releases/download/v1.4.0/GreenShieldQuickApply-Combined-F8-MCP-v1.4.0.zip)。一个压缩包同时包含托盘版、CLI、MCP 适配器、Codex 插件模板、源码和启动脚本。
 
 ### Agent 接入
 
