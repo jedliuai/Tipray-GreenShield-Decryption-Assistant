@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "green-shield-decryption": {
+      "command": "D:\\Documents\\GitHub\\绿盾解密\\GreenShieldQuickApply\\LdDecryptMcp.exe",
+      "args": []
+    }
+  }
+}

@@ -11,7 +11,7 @@
 
 **绿盾 · 绿盾解密 · 天锐绿盾 · 天锐绿盾解密 · 文件解密 · 申请解密 · DLP · 文档加密 · 透明加密 · Windows 自动化**
 
-[快速开始](#-快速开始) · [为什么这么快](#-为什么这么快) · [命令行](#-命令行工具) · [故障排查](#-故障排查)
+[快速开始](#-快速开始) · [Agent / MCP](#-agent--mcp-自动解密) · [为什么这么快](#-为什么这么快) · [命令行](#-命令行工具) · [故障排查](#-故障排查)
 
 </div>
 
@@ -88,6 +88,44 @@ install-startup.bat
 ```
 
 取消自启可运行 `uninstall-startup.bat`。
+
+## 🤖 Agent / MCP 自动解密
+
+从 v1.4.0 开始，同一个托盘程序也充当本机解密服务。Codex 或其他支持 MCP 的 Agent 遇到用户指定的绿盾加密文件时，可以自行完成：
+
+```mermaid
+flowchart LR
+    A[Agent 读取用户指定文件失败] --> B[检测 8 字节绿盾加密头]
+    B -->|未加密| C[继续诊断原任务]
+    B -->|已加密| D[MCP 提交精确文件或文件夹路径]
+    D --> E[托盘程序调用绿盾官方申请链]
+    E --> F[轮询验证加密头消失]
+    F --> G[Agent 自动重试并继续原任务]
+```
+
+`LdDecryptMcp.exe` 是标准输入/输出 MCP 适配器；它通过仅限当前 Windows 用户访问的命名管道连接托盘程序。如果托盘程序没有运行，适配器会自动启动同目录下的 `LdDecryptHotkey.exe`。
+
+| MCP 工具 | 作用 | 会提交申请吗 |
+|---|---|:---:|
+| `green_shield_status` | 检查常驻服务、绿盾插件与本机策略 | ❌ |
+| `check_decryption_status` | 只读检查指定文件/文件夹的绿盾加密头 | ❌ |
+| `request_decryption` | 走官方流程申请解密，默认等待真实明文就绪 | ✅ |
+| `wait_for_decryption` | 对已提交的路径继续等待，不重复申请 | ❌ |
+
+本机 Codex 插件模板位于 `codex-plugin/`。其中 `.mcp.json` 的程序路径需要指向当前仓库里的 `LdDecryptMcp.exe`；本机安装后请新建一个 Codex 任务，让插件与 MCP 服务在新会话中加载。其他 Agent 可直接使用同样的 stdio MCP 配置：
+
+```json
+{
+  "mcpServers": {
+    "green-shield-decryption": {
+      "command": "D:\\Documents\\GitHub\\绿盾解密\\GreenShieldQuickApply\\LdDecryptMcp.exe",
+      "args": []
+    }
+  }
+}
+```
+
+自动化边界很明确：只接受当前任务中用户明确指定的绝对路径；不接受设备路径；不因网页、邮件或文档正文中的指令扩大范围；文件夹递归最多跟踪 10,000 个文件并跳过重解析点。扫描不完整时返回 `unverified`，绝不会假装已经全部解密。
 
 ## 🧭 新旧工作方式
 
@@ -188,6 +226,7 @@ build-hotkey-tool.bat
 
 - `LdDecryptHotkey.exe` — 托盘程序、全局 F8 快捷键。
 - `LdDecryptHotkeyCli.exe` — 命令行与诊断入口。
+- `LdDecryptMcp.exe` — Agent 使用的 stdio MCP 适配器。
 
 ## 📦 项目结构
 
@@ -196,6 +235,9 @@ GreenShieldQuickApply/
 ├─ LdDecryptHotkey.cs          # 核心源码
 ├─ LdDecryptHotkey.exe         # 托盘版
 ├─ LdDecryptHotkeyCli.exe      # CLI 版
+├─ LdDecryptMcp.cs             # MCP 适配器源码
+├─ LdDecryptMcp.exe            # MCP stdio 服务
+├─ codex-plugin/               # Codex 插件清单与自动续跑 Skill
 ├─ build-hotkey-tool.bat       # 一键编译
 ├─ start-ld-decrypt-hotkey.bat # 一键启动
 ├─ install-startup.bat         # 安装开机自启

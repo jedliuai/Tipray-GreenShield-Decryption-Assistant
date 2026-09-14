@@ -1,13 +1,18 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.IO.Pipes;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
 using System.Threading;
 using System.Windows.Automation;
 using System.Windows.Forms;
+using System.Web.Script.Serialization;
 
 internal static class LdDecryptHotkey
 {
@@ -17,6 +22,9 @@ internal static class LdDecryptHotkey
     private const int DirectApplyReadyDelayMs = 900;
     private const int LdCommandBufferSize = 0x20C;
     private const int LdCommandDataSize = 512;
+    private const int MaxTrackedFiles = 10000;
+    private const string McpPipeName = "GreenShieldQuickApply.Mcp.v1";
+    private const string ServiceVersion = "1.4.0";
     private const uint MouseeventfLeftdown = 0x0002;
     private const uint MouseeventfLeftup = 0x0004;
     private const string StartupShortcutName = "Lvdun Auto Decryption.lnk";
@@ -24,7 +32,9 @@ internal static class LdDecryptHotkey
     private static readonly string LogPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LdDecryptHotkey.log");
     private static readonly object LdPlugSync = new object();
     private static readonly object LogSync = new object();
+    private static readonly object DecryptionOperationSync = new object();
     private static bool ldPlugInitialized;
+    private static volatile bool pipeServerStopping;
 
     [DllImport("user32.dll")]
     private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -162,6 +172,7 @@ internal static class LdDecryptHotkey
                     return;
                 }
                 Log("started");
+                StartMcpPipeServer();
                 tray.ShowBalloonTip(1200, "\u7eff\u76fe\u5feb\u901f\u7533\u8bf7 F8", "\u5df2\u542f\u52a8\u3002\u9009\u4e2d\u6587\u4ef6\u6216\u6587\u4ef6\u5939\u540e\u6309 F8\uff0c\u76f4\u63a5\u8c03\u7528\u7eff\u76fe\u672c\u5730\u7533\u8bf7\u3002", ToolTipIcon.Info);
                 ThreadPool.QueueUserWorkItem(delegate
                 {
@@ -171,6 +182,7 @@ internal static class LdDecryptHotkey
             };
             FormClosed += delegate
             {
+                pipeServerStopping = true;
                 if (hotkeyRegistered)
                     UnregisterHotKey(Handle, HotkeyId);
                 tray.Visible = false;
@@ -235,39 +247,55 @@ internal static class LdDecryptHotkey
 
         var paths = ValidateTargets(target.Paths);
         Log("target: " + target.Name + " | count=" + paths.Count + " | hwnd=" + target.Hwnd);
+        RunDirectApprovalForPaths(paths, submit);
+    }
 
-        if (FindApprovalWindows().Count > 0)
-            throw new InvalidOperationException("\u5df2\u6709\u7eff\u76fe\u89e3\u5bc6\u7533\u8bf7\u7a97\u53e3\u672a\u5904\u7406\u3002\u8bf7\u5148\u53d1\u9001\u6216\u5173\u95ed\u5b83\uff0c\u518d\u6309 F8\uff0c\u4ee5\u514d\u628a\u6587\u4ef6\u52a0\u5165\u9519\u8bef\u7684\u7533\u8bf7\u3002");
+    private static void RunDirectApprovalForPaths(List<string> rawPaths, bool submit)
+    {
+        var paths = ValidateTargets(rawPaths);
+        lock (DecryptionOperationSync)
+        {
+            if (FindApprovalWindows().Count > 0)
+                throw new InvalidOperationException("\u5df2\u6709\u7eff\u76fe\u89e3\u5bc6\u7533\u8bf7\u7a97\u53e3\u672a\u5904\u7406\u3002\u8bf7\u5148\u53d1\u9001\u6216\u5173\u95ed\u5b83\uff0c\u518d\u91cd\u8bd5\uff0c\u4ee5\u514d\u628a\u65b0\u76ee\u6807\u52a0\u5165\u9519\u8bef\u7684\u7533\u8bf7\u3002");
 
-        SendOfficialDecryptSignal(paths);
-        Log("direct signal sent: " + paths.Count + " item(s)");
+            SendOfficialDecryptSignal(paths);
+            Log("direct signal sent: " + paths.Count + " item(s)");
 
-        var applyWindow = WaitForApprovalWindow(10000);
-        if (applyWindow == IntPtr.Zero)
-            throw new InvalidOperationException("\u7eff\u76fe\u5df2\u63a5\u6536\u672c\u5730\u547d\u4ee4\uff0c\u4f46\u6ca1\u6709\u6253\u5f00\u7533\u8bf7\u7a97\u53e3\u3002");
+            var applyWindow = WaitForApprovalWindow(10000);
+            if (applyWindow == IntPtr.Zero)
+                throw new InvalidOperationException("\u7eff\u76fe\u5df2\u63a5\u6536\u672c\u5730\u547d\u4ee4\uff0c\u4f46\u6ca1\u6709\u6253\u5f00\u7533\u8bf7\u7a97\u53e3\u3002");
 
-        Log("direct apply window found");
-        if (!submit) return;
+            Log("direct apply window found");
+            if (!submit) return;
 
-        var sendButton = WaitForButtonInWindow(applyWindow,
-            new[] { "\u53d1\u9001\u7533\u8bf7", "\u63d0\u4ea4\u7533\u8bf7", "\u53d1\u9001", "\u63d0\u4ea4" },
-            DirectApplyReadyDelayMs);
-        var sent = sendButton != null
-            ? ClickOrInvoke(sendButton)
-            : ClickSendApplyButton(applyWindow);
-        if (!sent)
-            throw new InvalidOperationException("\u7533\u8bf7\u7a97\u53e3\u5df2\u6253\u5f00\uff0c\u4f46\u65e0\u6cd5\u5b89\u5168\u89e6\u53d1\u201c\u53d1\u9001\u7533\u8bf7\u201d\u3002\u8bf7\u624b\u52a8\u68c0\u67e5\u540e\u53d1\u9001\u3002");
-        Log("direct send apply clicked");
+            var sendButton = WaitForButtonInWindow(applyWindow,
+                new[] { "\u53d1\u9001\u7533\u8bf7", "\u63d0\u4ea4\u7533\u8bf7", "\u53d1\u9001", "\u63d0\u4ea4" },
+                DirectApplyReadyDelayMs);
+            var sent = sendButton != null
+                ? ClickOrInvoke(sendButton)
+                : ClickSendApplyButton(applyWindow);
+            if (!sent)
+                throw new InvalidOperationException("\u7533\u8bf7\u7a97\u53e3\u5df2\u6253\u5f00\uff0c\u4f46\u65e0\u6cd5\u5b89\u5168\u89e6\u53d1\u201c\u53d1\u9001\u7533\u8bf7\u201d\u3002\u8bf7\u624b\u52a8\u68c0\u67e5\u540e\u53d1\u9001\u3002");
+            Log("direct send apply clicked");
+        }
     }
 
     private static List<string> ValidateTargets(List<string> paths)
     {
+        if (paths == null || paths.Count == 0)
+            throw new ArgumentException("At least one path is required.");
+
         var validated = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in paths)
         {
             if (string.IsNullOrWhiteSpace(path))
                 continue;
+            if (!Path.IsPathRooted(path))
+                throw new ArgumentException("Only absolute paths are accepted: " + path);
+            if (path.StartsWith(@"\\.\", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith(@"\\?\", StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("Windows device paths are not accepted: " + path);
 
             var fullPath = Path.GetFullPath(path);
             if (!File.Exists(fullPath) && !Directory.Exists(fullPath))
@@ -353,6 +381,462 @@ internal static class LdDecryptHotkey
         {
             Marshal.FreeHGlobal(pointer);
         }
+    }
+
+    private sealed class EncryptionSnapshot
+    {
+        public int ScannedFiles;
+        public readonly List<string> EncryptedFiles = new List<string>();
+        public readonly List<string> UnreadableFiles = new List<string>();
+        public readonly List<string> Warnings = new List<string>();
+    }
+
+    private static void StartMcpPipeServer()
+    {
+        pipeServerStopping = false;
+        var thread = new Thread(McpPipeServerLoop)
+        {
+            IsBackground = true,
+            Name = "GreenShield MCP pipe"
+        };
+        thread.Start();
+    }
+
+    private static void McpPipeServerLoop()
+    {
+        Log("MCP pipe server starting: " + McpPipeName);
+        while (!pipeServerStopping)
+        {
+            NamedPipeServerStream pipe = null;
+            try
+            {
+                pipe = CreateSecurePipe();
+                pipe.WaitForConnection();
+                var connectedPipe = pipe;
+                pipe = null;
+                ThreadPool.QueueUserWorkItem(_ => HandlePipeConnection(connectedPipe));
+            }
+            catch (Exception ex)
+            {
+                if (!pipeServerStopping)
+                    Log("MCP pipe error: " + ex);
+            }
+            finally
+            {
+                if (pipe != null) pipe.Dispose();
+            }
+        }
+    }
+
+    private static void HandlePipeConnection(NamedPipeServerStream pipe)
+    {
+        try
+        {
+            using (pipe)
+            using (var reader = new StreamReader(pipe, new UTF8Encoding(false), false, 4096, true))
+            using (var writer = new StreamWriter(pipe, new UTF8Encoding(false), 4096, true) { AutoFlush = true })
+            {
+                var request = reader.ReadLine();
+                if (!string.IsNullOrWhiteSpace(request))
+                    writer.WriteLine(HandlePipeRequest(request));
+            }
+        }
+        catch (Exception ex)
+        {
+            if (!pipeServerStopping)
+                Log("MCP client connection error: " + ex.Message);
+        }
+    }
+
+    private static NamedPipeServerStream CreateSecurePipe()
+    {
+        var identity = WindowsIdentity.GetCurrent();
+        var security = new PipeSecurity();
+        security.SetAccessRuleProtection(true, false);
+        security.AddAccessRule(new PipeAccessRule(
+            identity.User,
+            PipeAccessRights.ReadWrite | PipeAccessRights.CreateNewInstance,
+            AccessControlType.Allow));
+        return new NamedPipeServerStream(
+            McpPipeName,
+            PipeDirection.InOut,
+            8,
+            PipeTransmissionMode.Byte,
+            PipeOptions.None,
+            4096,
+            4096,
+            security);
+    }
+
+    private static string HandlePipeRequest(string json)
+    {
+        var serializer = new JavaScriptSerializer();
+        try
+        {
+            var request = serializer.DeserializeObject(json) as Dictionary<string, object>;
+            if (request == null)
+                throw new ArgumentException("Invalid MCP bridge request.");
+
+            var action = ReadString(request, "action", "").ToLowerInvariant();
+            Dictionary<string, object> result;
+            switch (action)
+            {
+                case "status":
+                    result = BuildServiceStatus();
+                    break;
+                case "check":
+                    result = BuildEncryptionStatus(ReadStringList(request, "paths"));
+                    break;
+                case "request":
+                    result = ExecuteMcpDecryption(
+                        ReadStringList(request, "paths"),
+                        ReadBool(request, "wait", true),
+                        ClampTimeout(ReadInt(request, "timeoutSeconds", 120)),
+                        ReadBool(request, "force", false),
+                        ReadString(request, "reason", "Agent requested access to an encrypted file."));
+                    break;
+                case "wait":
+                    result = WaitForTargets(
+                        ReadStringList(request, "paths"),
+                        ClampTimeout(ReadInt(request, "timeoutSeconds", 120)));
+                    break;
+                default:
+                    throw new ArgumentException("Unknown MCP bridge action: " + action);
+            }
+            result["ok"] = true;
+            result["serviceVersion"] = ServiceVersion;
+            return serializer.Serialize(result);
+        }
+        catch (Exception ex)
+        {
+            Log("MCP request failed: " + ex);
+            return serializer.Serialize(new Dictionary<string, object>
+            {
+                { "ok", false },
+                { "serviceVersion", ServiceVersion },
+                { "error", ex.Message },
+                { "errorType", ex.GetType().Name }
+            });
+        }
+    }
+
+    private static Dictionary<string, object> BuildServiceStatus()
+    {
+        var pluginExists = File.Exists(LdMenuPlugPath);
+        var policyEnabled = false;
+        if (pluginExists)
+        {
+            lock (LdPlugSync)
+            {
+                EnsureLdMenuPlugInitializedUnsafe();
+                policyEnabled = LdMenuPlugGetMenuType(10);
+            }
+        }
+        return new Dictionary<string, object>
+        {
+            { "status", pluginExists && policyEnabled ? "ready" : "unavailable" },
+            { "pluginExists", pluginExists },
+            { "policyEnabled", policyEnabled },
+            { "pipeName", McpPipeName },
+            { "processId", Process.GetCurrentProcess().Id }
+        };
+    }
+
+    private static Dictionary<string, object> BuildEncryptionStatus(List<string> rawPaths)
+    {
+        var paths = ValidateTargets(rawPaths);
+        var snapshot = InspectEncryption(paths);
+        return BuildSnapshotResult(
+            GetInspectionStatus(snapshot, "decrypted"),
+            false,
+            snapshot,
+            0);
+    }
+
+    private static Dictionary<string, object> ExecuteMcpDecryption(
+        List<string> rawPaths,
+        bool wait,
+        int timeoutSeconds,
+        bool force,
+        string reason)
+    {
+        var paths = ValidateTargets(rawPaths);
+        var snapshot = InspectEncryption(paths);
+        if (snapshot.EncryptedFiles.Count == 0 && !force)
+            return BuildSnapshotResult(
+                GetInspectionStatus(snapshot, "already_decrypted"),
+                false,
+                snapshot,
+                0);
+
+        var safeReason = (reason ?? "").Replace("\r", " ").Replace("\n", " ");
+        if (safeReason.Length > 500) safeReason = safeReason.Substring(0, 500);
+        Log("MCP decrypt request: targets=" + paths.Count +
+            " encrypted=" + snapshot.EncryptedFiles.Count +
+            " force=" + force +
+            " reason=" + safeReason);
+
+        RunDirectApprovalForPaths(paths, true);
+        if (!wait || snapshot.EncryptedFiles.Count == 0)
+            return BuildSnapshotResult(
+                snapshot.EncryptedFiles.Count == 0 ? "submitted_unverified" : "submitted",
+                true,
+                snapshot,
+                0);
+
+        return WaitForEncryptedFiles(snapshot.EncryptedFiles, timeoutSeconds, true, snapshot);
+    }
+
+    private static Dictionary<string, object> WaitForTargets(List<string> rawPaths, int timeoutSeconds)
+    {
+        var paths = ValidateTargets(rawPaths);
+        var snapshot = InspectEncryption(paths);
+        if (snapshot.EncryptedFiles.Count == 0)
+            return BuildSnapshotResult(
+                GetInspectionStatus(snapshot, "decrypted"),
+                false,
+                snapshot,
+                0);
+        return WaitForEncryptedFiles(snapshot.EncryptedFiles, timeoutSeconds, false, snapshot);
+    }
+
+    private static string GetInspectionStatus(EncryptionSnapshot snapshot, string clearStatus)
+    {
+        if (snapshot.EncryptedFiles.Count > 0) return "encrypted";
+        if (snapshot.UnreadableFiles.Count > 0) return "unreadable";
+        if (snapshot.Warnings.Count > 0) return "unverified";
+        return clearStatus;
+    }
+
+    private static Dictionary<string, object> WaitForEncryptedFiles(
+        List<string> encryptedFiles,
+        int timeoutSeconds,
+        bool submitted,
+        EncryptionSnapshot initialSnapshot)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        EncryptionSnapshot latest = null;
+        while (stopwatch.Elapsed.TotalSeconds < timeoutSeconds)
+        {
+            latest = InspectSpecificFiles(encryptedFiles);
+            if (latest.EncryptedFiles.Count == 0 && latest.UnreadableFiles.Count == 0)
+            {
+                MergeInspectionIssues(latest, initialSnapshot);
+                Log("MCP decrypt completed: files=" + encryptedFiles.Count +
+                    " elapsedMs=" + stopwatch.ElapsedMilliseconds);
+                return BuildSnapshotResult(
+                    GetInspectionStatus(latest, "decrypted"),
+                    submitted,
+                    latest,
+                    stopwatch.ElapsedMilliseconds);
+            }
+            Thread.Sleep(1000);
+        }
+
+        latest = InspectSpecificFiles(encryptedFiles);
+        MergeInspectionIssues(latest, initialSnapshot);
+        Log("MCP decrypt wait timeout: remaining=" + latest.EncryptedFiles.Count +
+            " unreadable=" + latest.UnreadableFiles.Count);
+        return BuildSnapshotResult("pending", submitted, latest, stopwatch.ElapsedMilliseconds);
+    }
+
+    private static void MergeInspectionIssues(EncryptionSnapshot target, EncryptionSnapshot source)
+    {
+        if (source == null) return;
+        foreach (var path in source.UnreadableFiles)
+        {
+            if (!ContainsPath(target.UnreadableFiles, path))
+                target.UnreadableFiles.Add(path);
+        }
+        foreach (var warning in source.Warnings)
+        {
+            if (!target.Warnings.Contains(warning))
+                target.Warnings.Add(warning);
+        }
+    }
+
+    private static bool ContainsPath(List<string> paths, string candidate)
+    {
+        foreach (var path in paths)
+        {
+            if (string.Equals(path, candidate, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    private static EncryptionSnapshot InspectEncryption(List<string> paths)
+    {
+        var snapshot = new EncryptionSnapshot();
+        foreach (var path in paths)
+        {
+            if (File.Exists(path))
+            {
+                InspectFile(path, snapshot);
+                continue;
+            }
+            InspectDirectory(path, snapshot);
+        }
+        return snapshot;
+    }
+
+    private static EncryptionSnapshot InspectSpecificFiles(List<string> paths)
+    {
+        var snapshot = new EncryptionSnapshot();
+        foreach (var path in paths)
+            InspectFile(path, snapshot);
+        return snapshot;
+    }
+
+    private static void InspectDirectory(string root, EncryptionSnapshot snapshot)
+    {
+        var directories = new Stack<string>();
+        directories.Push(root);
+        while (directories.Count > 0)
+        {
+            var directory = directories.Pop();
+            try
+            {
+                foreach (var file in Directory.GetFiles(directory))
+                    InspectFile(file, snapshot);
+            }
+            catch (Exception ex)
+            {
+                snapshot.Warnings.Add(directory + ": " + ex.Message);
+            }
+
+            try
+            {
+                foreach (var child in Directory.GetDirectories(directory))
+                {
+                    try
+                    {
+                        if ((new DirectoryInfo(child).Attributes & FileAttributes.ReparsePoint) != 0)
+                        {
+                            snapshot.Warnings.Add("Skipped reparse point: " + child);
+                            continue;
+                        }
+                        directories.Push(child);
+                    }
+                    catch (Exception ex)
+                    {
+                        snapshot.Warnings.Add(child + ": " + ex.Message);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                snapshot.Warnings.Add(directory + ": " + ex.Message);
+            }
+        }
+    }
+
+    private static void InspectFile(string path, EncryptionSnapshot snapshot)
+    {
+        snapshot.ScannedFiles++;
+        if (snapshot.ScannedFiles > MaxTrackedFiles)
+            throw new InvalidOperationException("The request contains more than " + MaxTrackedFiles + " files. Select a smaller scope.");
+
+        if (!File.Exists(path))
+        {
+            snapshot.UnreadableFiles.Add(path);
+            return;
+        }
+
+        try
+        {
+            var header = new byte[8];
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            {
+                if (stream.Read(header, 0, header.Length) == header.Length && IsGreenShieldHeader(header))
+                    snapshot.EncryptedFiles.Add(path);
+            }
+        }
+        catch
+        {
+            snapshot.UnreadableFiles.Add(path);
+        }
+    }
+
+    private static bool IsGreenShieldHeader(byte[] header)
+    {
+        return header != null && header.Length >= 8 &&
+            header[0] == 0x87 && header[1] == 0x7D && header[2] == 0x1C &&
+            header[4] == 0x90 && header[5] == 0x10 && header[6] == 0x29 && header[7] == 0x01;
+    }
+
+    private static Dictionary<string, object> BuildSnapshotResult(
+        string status,
+        bool submitted,
+        EncryptionSnapshot snapshot,
+        long elapsedMilliseconds)
+    {
+        return new Dictionary<string, object>
+        {
+            { "status", status },
+            { "submitted", submitted },
+            { "scannedFiles", snapshot.ScannedFiles },
+            { "encryptedRemaining", snapshot.EncryptedFiles.Count },
+            { "unreadableFiles", snapshot.UnreadableFiles.Count },
+            { "encryptedSample", TakeSample(snapshot.EncryptedFiles, 20) },
+            { "unreadableSample", TakeSample(snapshot.UnreadableFiles, 20) },
+            { "warnings", TakeSample(snapshot.Warnings, 20) },
+            { "elapsedMilliseconds", elapsedMilliseconds }
+        };
+    }
+
+    private static string[] TakeSample(List<string> values, int maximum)
+    {
+        var count = Math.Min(values.Count, maximum);
+        var sample = new string[count];
+        for (var index = 0; index < count; index++) sample[index] = values[index];
+        return sample;
+    }
+
+    private static int ClampTimeout(int timeoutSeconds)
+    {
+        return Math.Max(1, Math.Min(600, timeoutSeconds));
+    }
+
+    private static string ReadString(Dictionary<string, object> values, string name, string defaultValue)
+    {
+        object value;
+        return values.TryGetValue(name, out value) && value != null ? Convert.ToString(value) : defaultValue;
+    }
+
+    private static int ReadInt(Dictionary<string, object> values, string name, int defaultValue)
+    {
+        object value;
+        int parsed;
+        return values.TryGetValue(name, out value) && value != null && int.TryParse(Convert.ToString(value), out parsed)
+            ? parsed
+            : defaultValue;
+    }
+
+    private static bool ReadBool(Dictionary<string, object> values, string name, bool defaultValue)
+    {
+        object value;
+        bool parsed;
+        return values.TryGetValue(name, out value) && value != null && bool.TryParse(Convert.ToString(value), out parsed)
+            ? parsed
+            : defaultValue;
+    }
+
+    private static List<string> ReadStringList(Dictionary<string, object> values, string name)
+    {
+        object value;
+        if (!values.TryGetValue(name, out value) || value == null)
+            throw new ArgumentException("paths is required.");
+
+        var result = new List<string>();
+        var enumerable = value as IEnumerable;
+        if (enumerable == null || value is string)
+            throw new ArgumentException("paths must be an array of absolute paths.");
+        foreach (var item in enumerable)
+        {
+            if (item != null) result.Add(Convert.ToString(item));
+        }
+        return result;
     }
 
     private static int RunCli(string[] args)

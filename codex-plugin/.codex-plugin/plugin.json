@@ -1,0 +1,22 @@
+{
+  "name": "green-shield-decryption",
+  "version": "1.4.0",
+  "description": "让 Codex 和其他 MCP Agent 自动识别用户授权路径中的绿盾加密文件，提交官方解密申请，等待明文就绪并继续原任务。",
+  "author": {
+    "name": "jedliuai"
+  },
+  "homepage": "https://github.com/jedliuai/Lvdun-Auto-Decryption",
+  "repository": "https://github.com/jedliuai/Lvdun-Auto-Decryption",
+  "keywords": ["绿盾", "天锐绿盾", "解密", "透明解密", "MCP", "文件解密"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "绿盾自动解密",
+    "shortDescription": "让 Agent 自动申请并等待绿盾文件解密。",
+    "longDescription": "连接本机常驻的绿盾快速申请程序；检测加密、提交官方申请、验证明文就绪，并让 Agent 自动继续文件任务。",
+    "developerName": "jedliuai",
+    "category": "Productivity",
+    "capabilities": ["检测绿盾文件状态", "提交官方解密申请", "等待解密并自动续跑", "支持文件与文件夹"],
+    "defaultPrompt": ["处理我指定的本地文件；如果检测到绿盾加密，请自动申请解密、等待成功后继续。"]
+  },
+  "mcpServers": "./.mcp.json"
+}
