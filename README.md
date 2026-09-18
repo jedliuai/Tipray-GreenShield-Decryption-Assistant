@@ -126,7 +126,7 @@ flowchart LR
     E --> F[发送解密申请]
 ```
 
-实际剩余耗时主要来自绿盾官方申请窗口自身的启动、渲染与后续审批。旧版代码仍保留在 Git 历史中，可查看 [`47d4f68` 历史快照](https://github.com/jedliuai/Tipray-GreenShield-Decryption-Assistant/tree/47d4f68)。
+实际剩余耗时主要来自绿盾官方申请窗口自身的启动、渲染与后续审批。旧版代码仍保留在 Git 历史中，可查看 [`v1.2.4` 历史版本](https://github.com/jedliuai/Tipray-GreenShield-Decryption-Assistant/tree/v1.2.4)。
 
 ## 技术原理
 
