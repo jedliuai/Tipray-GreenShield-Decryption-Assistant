@@ -4,6 +4,8 @@
 
 ## 天锐绿盾 F8 / MCP 授权解密申请助手
 
+[简体中文](README.md) | [English](README_EN.md)
+
 **人在资源管理器选中文件按 `F8`；AI Agent 遇到绿盾密文时自动申请、等待并继续原任务。**
 
 [![Latest Release](https://img.shields.io/github/v/release/jedliuai/Tipray-GreenShield-Decryption-Assistant?style=for-the-badge&label=下载)](https://github.com/jedliuai/Tipray-GreenShield-Decryption-Assistant/releases/latest)
@@ -201,6 +203,7 @@ Tipray-GreenShield-Decryption-Assistant/
 ├─ build-hotkey-tool.bat       # 一键编译
 ├─ start-ld-decrypt-hotkey.bat # 一键启动 F8 常驻程序
 ├─ install-codex-integration.* # 一键接入 Codex
+├─ README_EN.md                # English documentation
 ├─ SECURITY.md                 # 安全边界与私下报告方式
 └─ worklog/                    # 中文开发记录
 ```
