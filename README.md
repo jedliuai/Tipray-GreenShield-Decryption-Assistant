@@ -1,3 +1,5 @@
+> **Chatgpt代充：[aishopvip.com](https://aishopvip.com)**
+
 <div align="center">
 
 # Tipray Green Shield Decryption Assistant
